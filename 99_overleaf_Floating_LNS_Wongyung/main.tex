@@ -1,0 +1,444 @@
+\documentclass{article}
+
+\usepackage{arxiv}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{float}          % for [H] float placement
+\usepackage{graphicx}
+\usepackage{natbib}
+\usepackage{doi}
+\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+
+% Custom commands
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\Fr}{\mathrm{Fr}}
+\newcommand{\We}{\mathrm{We}}
+\newcommand{\Rey}{\mathrm{Re}}
+\newcommand{\uu}{\mathbf{u}}
+\newcommand{\ww}{\mathbf{w}}
+\newcommand{\xx}{\mathbf{x}}
+\newcommand{\bb}{\mathbf{b}}
+\newcommand{\OO}{\mathcal{O}}
+
+\title{A monolithic solver for linearised Navier--Stokes free-surface dynamics via Helmholtz decomposition}
+
+%\date{September 9, 1985}	% Here you can change the date presented in the paper title
+%\date{} 					% Or removing it
+
+\author{
+  [Author~1]\thanks{Corresponding author.} \\
+  [Department] \\
+  [University] \\
+  \texttt{[email]} \\
+  \And
+  [Author~2] \\
+  [Department] \\
+  [University] \\
+  \texttt{[email]} \\
+}
+
+\renewcommand{\shorttitle}{Monolithic LNS free-surface solver}
+
+\hypersetup{
+  pdftitle={A monolithic solver for linearised Navier--Stokes free-surface dynamics via Helmholtz decomposition},
+  pdfsubject={physics.flu-dyn, math.NA},
+  pdfauthor={[Author 1], [Author 2]},
+  pdfkeywords={free surface dynamics, linearised Navier--Stokes, Helmholtz decomposition, monolithic solver, LU prefactorisation},
+}
+
+\begin{document}
+\maketitle
+
+%% ================================================================
+%% ABSTRACT
+%% ================================================================
+\begin{abstract}
+We present a numerical implementation of the linearised Navier--Stokes (LNS) free-surface model of \citet{GaleanoRiosEtAl2017}, which employs a Helmholtz decomposition of the velocity field into irrotational and vortical components.
+The model solves the coupled system of Laplace's equation for the velocity potential, heat equations for the vortical fields, and surface evolution equations that incorporate gravity, surface tension, and viscous effects.
+We implement both a sequential (operator-splitting) solver and a monolithic formulation in which all unknowns---the vortical components $w^3$ and $w^1$, the surface potential $\phi_s$, the bulk potential $\phi$, and the surface elevation $\eta$---are assembled into a single linear system $A\xx = \bb$.
+Because the coefficient matrix $A$ is independent of the solution, it is factored once via sparse LU decomposition; each subsequent time step requires only $\OO(N)$ back-substitution.
+We verify that the two formulations produce identical results to machine precision and demonstrate the computational advantage of the monolithic approach.
+% TODO: Add 1--2 sentences on key quantitative results.
+\end{abstract}
+
+\keywords{Free surface dynamics \and linearised Navier--Stokes \and Helmholtz decomposition \and monolithic solver \and LU prefactorisation \and finite differences}
+
+%% ================================================================
+%% 1. INTRODUCTION
+%% ================================================================
+\section{Introduction}
+\label{sec:intro}
+
+The dynamics of viscous free-surface flows arise in numerous physical settings, from ocean wave propagation and droplet impact to the interaction of floating bodies with fluid baths.
+While the full Navier--Stokes equations govern such flows, their nonlinearity and the need to track a moving free surface make direct numerical solution computationally expensive.
+For problems where surface deflections are small relative to the fluid depth, a linearised approach can retain the essential physics---gravity, surface tension, and viscous dissipation---at greatly reduced cost.
+
+\citet{GaleanoRiosEtAl2017} developed such a linearised Navier--Stokes (LNS) framework in the context of non-wetting sphere impact on a fluid bath and bouncing droplet dynamics.
+The central idea is a Helmholtz decomposition of the velocity field $\uu = \nabla\phi + \ww$, which separates the flow into an irrotational component $\nabla\phi$ satisfying Laplace's equation in the bulk and a vortical component $\ww$ governed by the heat equation.
+The two components are coupled through linearised boundary conditions at the free surface, which encode the kinematic condition (the surface moves with the fluid), the dynamic condition (normal stress balance including gravity, surface tension, and viscous effects), and a vorticity evolution equation.
+At the bottom boundary, the non-slip condition $\uu = 0$ couples the vortical field to the potential field.
+
+This framework was subsequently used by \citet{MilweskiEtAl2015} to study Faraday pilot-wave dynamics, by \citet{GaleanoRios2016} to investigate hydrodynamic pilot-wave resonance, and more recently by \citet{Barotta2025} in the context of macroscopic Brownian motion on chaotic fluid interfaces.
+\citet{AgueroEtAl2022} applied the framework to the impact of a rigid sphere onto an elastic membrane, demonstrating its applicability to fluid--structure interaction problems.
+The classical potential-flow foundations trace back to \citet{Lamb1932} and \citet{Batchelor1967}.
+
+A common simplification employed in some implementations is the diagnostic relation $w^3 = (2/\Rey)\,\Delta_H\eta$ at the surface, derived by combining the kinematic and vorticity surface equations under the assumption that initial vorticity transients have decayed.
+While this eliminates one unknown and is valid at high Reynolds numbers, it does not capture the full transient behaviour of the surface vorticity, and it precludes correct treatment of the non-slip bottom boundary condition for the vortical field.
+In the present work, we solve the \emph{full} set of equations (2.15a--e) from \citet{GaleanoRiosEtAl2017}, evolving $w^3$ and $w^1$ as independent 2D fields via their respective heat equations, with proper boundary conditions at both the free surface and the solid bottom.
+
+Our main contribution is a monolithic formulation of the full system.
+In the standard sequential (operator-splitting) approach, each time step involves multiple sparse solves: the heat equations for $w^3$ and $w^1$, the implicit surface update for $\phi_s$, the Laplace equation for the bulk potential, and the kinematic update for $\eta$.
+We show that the entire system can be assembled into a single block-structured linear system
+\begin{equation*}
+    A\,\xx^{n+1} = \bb(\xx^n),
+\end{equation*}
+where $\xx = [w^3,\, w^1,\, \phi_s,\, \phi_{\mathrm{bulk}},\, \eta]^\top$.
+Because all equations are linear with constant coefficients, the matrix $A$ does not depend on the solution.
+It is factored once via sparse LU decomposition at setup time, and each time step reduces to a single back-substitution at $\OO(N)$ cost.
+We verify that the monolithic and sequential solvers produce identical results to machine precision, confirming the equivalence of the two formulations.
+
+The remainder of this paper is organised as follows.
+Section~\ref{sec:formulation} presents the mathematical model: the Helmholtz decomposition, the governing equations in the bulk and at the boundaries, and the non-dimensionalisation.
+Section~\ref{sec:numerical} describes the numerical methods: finite difference discretisation, the sequential time-stepping algorithm, and the monolithic system assembly.
+Section~\ref{sec:results} presents numerical results.
+% TODO: Expand outline once results are finalised.
+
+%% ================================================================
+%% 2. MATHEMATICAL MODEL
+%% ================================================================
+\section{Mathematical model}
+\label{sec:formulation}
+
+\subsection{Physical setup}
+\label{sec:setup}
+
+We consider a two-dimensional domain with horizontal coordinate $x' \in [0, L']$ and vertical coordinate $z'$, where $z' = 0$ is at the mean free surface and $z' = -D'$ is at the solid bottom.
+The fluid has density $\rho$, kinematic viscosity $\nu$, and surface tension coefficient $\sigma$.
+The free surface is located at $z' = \eta'(x', t')$, where $\eta'$ is the surface elevation.
+Primes denote dimensional variables.
+
+We assume that surface deflections are small relative to the depth ($|\eta'| \ll D'$), so that the free-surface boundary conditions can be linearised about $z' = 0$.
+Horizontal boundary conditions are periodic: $\eta'(0, t') = \eta'(L', t')$, and similarly for all other fields.
+
+\subsection{Helmholtz decomposition}
+\label{sec:helmholtz}
+
+Following \citet{GaleanoRiosEtAl2017}, the velocity field is decomposed as
+\begin{equation}
+    \uu = \nabla\phi + \ww, \label{eq:helmholtz}
+\end{equation}
+where $\phi(x', z', t')$ is the velocity potential and $\ww(x', z', t')$ is the vortical component.
+Both fields are solenoidal: $\Delta\phi = 0$ (by construction) and $\nabla \cdot \ww = 0$ (from incompressibility).
+In two dimensions, $\ww = (w^1, w^3)$ has a horizontal component $w^1$ and a vertical component $w^3$; the out-of-plane component $w^2 = 0$ by symmetry.
+
+\subsection{Governing equations}
+\label{sec:governing}
+
+\subsubsection{Bulk equations}
+
+In the interior of the fluid domain ($z' < 0$), the potential satisfies Laplace's equation and each vortical component satisfies the heat equation:
+\begin{align}
+    \Delta\phi &= 0, \label{eq:laplace} \\
+    \partial_{t'} w^{\prime i} &= \nu\, \Delta w^{\prime i}, \quad i = 1, 3. \label{eq:heat}
+\end{align}
+
+\subsubsection{Free-surface boundary conditions ($z' = 0$)}
+
+The linearised boundary conditions at the free surface are (cf.\ \citealt{GaleanoRiosEtAl2017}, equations~2.15c--e):
+
+\paragraph{Kinematic condition (2.15c):}
+The surface moves with the fluid:
+\begin{equation}
+    \partial_{t'}\eta' = \partial_{z'}\phi' + w^{\prime 3}. \label{eq:surf_kin}
+\end{equation}
+
+\paragraph{Dynamic condition (2.15d):}
+The normal stress balance at the free surface:
+\begin{equation}
+    \partial_{t'}\phi'_s = -g\eta' + \frac{\sigma}{\rho}\,\partial_{x'x'}\eta' + 2\nu\,\partial_{x'x'}\phi'_s - \frac{2\nu\,\partial_{z'} w^{\prime 3}}{\,} - \frac{p'_s}{\rho}, \label{eq:surf_dyn}
+\end{equation}
+where $\phi'_s(x', t') = \phi'(x', 0, t')$ is the surface velocity potential, $\partial_{x'x'}$ is the horizontal Laplacian (which equals $\Delta_H$ in 2D), $p'_s$ is an externally applied surface pressure (zero in our case), and the curvature $\kappa[\eta'] \approx \partial_{x'x'}\eta'$ under the linearisation assumption.
+Note the term $-2\nu\,\partial_{z'} w^{\prime 3}$, which represents the viscous contribution from the vertical gradient of the vortical field.
+
+\paragraph{Vorticity evolution (2.15e):}
+The surface vorticity evolves according to:
+\begin{equation}
+    \partial_{t'} w^{\prime 3} = 2\nu\, \partial_{x'x'}\!\left(\partial_{z'}\phi' + w^{\prime 3}\right). \label{eq:surf_vort}
+\end{equation}
+
+\subsubsection{Bottom boundary condition ($z' = -D'$)}
+
+The non-slip condition $\uu = 0$ at the solid bottom requires, via the decomposition~\eqref{eq:helmholtz}:
+\begin{align}
+    w^{\prime 3} &= -\partial_{z'}\phi' \quad \text{at } z' = -D', \label{eq:bc_bot_w3} \\
+    w^{\prime 1} &= -\partial_{x'}\phi' \quad \text{at } z' = -D'. \label{eq:bc_bot_w1}
+\end{align}
+
+\subsubsection{Stress-free condition for $w^1$ at the surface}
+
+The tangential stress-free condition at the free surface (cf.\ \citealt{GaleanoRiosEtAl2017}, equation~2.11a) gives:
+\begin{equation}
+    \partial_{z'} w^{\prime 1} = -\left(\partial_{x'z'}\phi' + \partial_{x'} w^{\prime 3}\right) \quad \text{at } z' = 0. \label{eq:bc_surf_w1}
+\end{equation}
+
+\paragraph{Remark on equation (2.17).}
+Combining \eqref{eq:surf_kin} and \eqref{eq:surf_vort} and integrating in time, one can derive the diagnostic relation $w^3 = (2\nu/\text{etc.})\,\Delta_H\eta$ at the surface \citep{GaleanoRiosEtAl2017}.
+This is valid after initial transients have decayed and at high Reynolds numbers.
+In the present implementation, we do \emph{not} use this simplification; instead, we solve equation~\eqref{eq:surf_vort} directly, which correctly captures transient vorticity dynamics and is consistent with the non-slip bottom boundary condition.
+
+\subsection{Non-dimensionalisation}
+\label{sec:nondim}
+
+We non-dimensionalise using a characteristic length $L_c$ and velocity $V_c = L_c / T_c$:
+\begin{equation}
+    x = \frac{x'}{L_c}, \quad z = \frac{z'}{L_c}, \quad t = \frac{t'}{T_c}, \quad \eta = \frac{\eta'}{L_c}, \quad \phi = \frac{\phi'}{V_c L_c}.
+    \label{eq:nondim}
+\end{equation}
+This introduces the dimensionless numbers
+\begin{equation}
+    \Fr = \frac{V_c^2}{g L_c}, \qquad
+    \We = \frac{\rho\, V_c^2 L_c}{\sigma}, \qquad
+    \Rey = \frac{V_c L_c}{\nu}.
+    \label{eq:dimless}
+\end{equation}
+
+The dimensionless governing equations become:
+
+\paragraph{Bulk:}
+\begin{align}
+    \Delta\phi &= 0, \quad z \leq 0, \label{eq:nd_laplace} \\
+    \partial_t w^i &= \frac{1}{\Rey}\,\Delta w^i, \quad z \leq 0, \quad i = 1,3. \label{eq:nd_heat}
+\end{align}
+
+\paragraph{Free surface ($z = 0$):}
+\begin{align}
+    \partial_t \eta &= \partial_z \phi + w^3, \label{eq:nd_kin} \\
+    \partial_t \phi_s &= -\frac{1}{\Fr}\,\eta + \frac{1}{\We}\,\partial_{xx}\eta + \frac{2}{\Rey}\,\partial_{xx} \phi_s - \frac{2}{\Rey}\,\partial_z w^3, \label{eq:nd_dyn} \\
+    \partial_t w^3 &= \frac{2}{\Rey}\,\partial_{xx}\!\left(\partial_z\phi + w^3\right). \label{eq:nd_vort}
+\end{align}
+
+\paragraph{Bottom ($z = -D$):}
+\begin{align}
+    w^3 &= -\partial_z\phi, \label{eq:nd_bot_w3} \\
+    w^1 &= -\partial_x\phi. \label{eq:nd_bot_w1}
+\end{align}
+
+\paragraph{Surface stress-free for $w^1$:}
+\begin{equation}
+    \partial_z w^1 = -(\partial_{xz}\phi + \partial_x w^3) \quad \text{at } z = 0. \label{eq:nd_surf_w1}
+\end{equation}
+
+
+%% ================================================================
+%% 3. NUMERICAL METHODS
+%% ================================================================
+\section{Numerical methods}
+\label{sec:numerical}
+
+\subsection{Spatial discretisation}
+\label{sec:spatial}
+
+We discretise the domain on a uniform rectangular grid with $n_x$ points in $x$ and $n_z$ points in $z$:
+\begin{equation}
+    x_j = j\,\Delta x, \quad j = 0, \ldots, n_x - 1; \qquad
+    z_i = -D + i\,\Delta z, \quad i = 0, \ldots, n_z - 1,
+\end{equation}
+with $\Delta x = L/n_x$ and $\Delta z = D/(n_z - 1)$.
+The index $i = 0$ corresponds to the bottom ($z = -D$) and $i = n_z - 1$ to the free surface ($z = 0$).
+
+Standard second-order finite differences are used throughout:
+\begin{itemize}
+    \item \textbf{Horizontal Laplacian} $\Delta_H = \partial_{xx}$: three-point stencil with periodic wrapping,
+    \begin{equation}
+        (\Delta_H u)_j = \frac{u_{j+1} - 2u_j + u_{j-1}}{(\Delta x)^2}, \quad j \pm 1 \text{ taken modulo } n_x.
+    \end{equation}
+    \item \textbf{Vertical derivative}: centred differences in the interior, one-sided at boundaries.
+    \item \textbf{2D Laplacian}: standard five-point stencil $\Delta = \Delta_H + \partial_{zz}$.
+\end{itemize}
+
+\subsection{Sequential solver}
+\label{sec:sequential}
+
+The sequential solver advances the solution from time level $n$ to $n+1$ in four sub-steps, each involving one or more sparse linear solves.
+
+\paragraph{Step 1: Evolve $w^3$ and $w^1$ (heat equations).}
+The bulk heat equation~\eqref{eq:nd_heat} is discretised implicitly:
+\begin{equation}
+    \left(I - \frac{\Delta t}{\Rey}\,\Delta_{2\text{D}}\right) w^{i,n+1} = w^{i,n}, \quad i = 1, 3,
+    \label{eq:heat_implicit}
+\end{equation}
+where $\Delta_{2\text{D}}$ is the discrete 2D Laplacian.
+After solving the bulk, the boundary conditions are overwritten:
+
+\begin{itemize}
+    \item \emph{Bottom} ($i = 0$): $w^{3,n+1}_j = -(\phi^n_{1,j} - \phi^n_{0,j})/\Delta z$ and $w^{1,n+1}_j = -(D_x\,\phi^n_0)_j$, where $D_x$ is the centred difference operator in $x$.
+    \item \emph{Surface} ($i = n_z - 1$) \emph{for} $w^3$: equation~\eqref{eq:nd_vort} discretised implicitly,
+    \begin{equation}
+        \left(I - \frac{2\Delta t}{\Rey}\,\Delta_H\right) w^{3,n+1}_s = w^{3,n}_s + \frac{2\Delta t}{\Rey}\,\Delta_H\,\phi_z^n, \label{eq:w3_surf_disc}
+    \end{equation}
+    where $\phi_z^n = (\phi^n_{n_z-1} - \phi^n_{n_z-2})/\Delta z$.
+    \item \emph{Surface for} $w^1$: stress-free condition~\eqref{eq:nd_surf_w1} discretised as $w^1_{n_z-1} = w^1_{n_z-2} - \Delta z\,(\phi_{xz}^n + D_x\,w^{3,n+1}_s)$.
+\end{itemize}
+
+\paragraph{Step 2: Update surface potential $\phi_s$ (dynamic condition).}
+Equation~\eqref{eq:nd_dyn} is discretised implicitly in the diffusion term:
+\begin{equation}
+    \left(I - \frac{2\Delta t}{\Rey}\,\Delta_H\right) \phi_s^{n+1} = \phi_s^n - \frac{\Delta t}{\Fr}\,\eta^n + \frac{\Delta t}{\We}\,\kappa[\eta^n] - \frac{2\Delta t}{\Rey}\,(D_z\,w^{3,n+1})_s,
+    \label{eq:phi_s_disc}
+\end{equation}
+where $\kappa[\eta] = \Delta_H\eta$ (linearised curvature) and $(D_z\,w^3)_s = (w^3_{n_z-1} - w^3_{n_z-2})/\Delta z$.
+
+\paragraph{Step 3: Solve Laplace equation for bulk $\phi$.}
+With the updated surface Dirichlet condition $\phi_{n_z-1,j} = \phi_s^{n+1}_j$ and the bottom ghost-point condition enforcing $\partial_z\phi = -w^{3,n+1}_0$ (from~\eqref{eq:nd_bot_w3}), we solve:
+\begin{equation}
+    A_{\text{Lap}}\,\vec{\phi}^{n+1} = \vec{b}_{\text{Lap}}, \label{eq:laplace_disc}
+\end{equation}
+where $A_{\text{Lap}}$ encodes the five-point Laplacian with periodic horizontal and appropriate vertical boundary conditions.
+
+\paragraph{Step 4: Update surface elevation $\eta$ (kinematic condition).}
+Equation~\eqref{eq:nd_kin} is updated explicitly:
+\begin{equation}
+    \eta^{n+1} = \eta^n + \Delta t\,\left(\phi_z^{n+1} + w^{3,n+1}_s\right), \label{eq:eta_disc}
+\end{equation}
+where $\phi_z^{n+1} = (\phi^{n+1}_{n_z-1} - \phi^{n+1}_{n_z-2})/\Delta z$.
+
+Each time step thus requires solving: two $n_z n_x$-sized heat systems (for $w^3$ and $w^1$), two $n_x$-sized tridiagonal-like surface systems (for $w^3_s$ and $\phi_s$), and one $n_z n_x$-sized Laplace system.
+
+\subsection{Monolithic formulation}
+\label{sec:monolithic}
+
+The sequential solver calls \texttt{spsolve} multiple times per step.
+We now show that the entire system can be assembled into a single matrix equation.
+
+\subsubsection{Unknown vector}
+
+The full state at time level $n+1$ is collected into a single vector:
+\begin{equation}
+    \xx = \begin{pmatrix} \vec{w}^3 \\ \vec{w}^1 \\ \vec{\phi}_s \\ \vec{\phi}_{\mathrm{bulk}} \\ \vec{\eta} \end{pmatrix}, \qquad N_{\mathrm{total}} = 3\,n_z n_x + 2\,n_x.
+    \label{eq:state_vector}
+\end{equation}
+
+\subsubsection{Block structure}
+
+The monolithic system $A\,\xx^{n+1} = \bb(\xx^n)$ has a block lower-triangular structure:
+
+\begin{center}
+\begin{tabular}{lcccccl}
+\toprule
+Row block & $w^3$ & $w^1$ & $\phi_s$ & $\phi_{\mathrm{bulk}}$ & $\eta$ & Equation \\
+\midrule
+$w^3$             & $\bullet$ &           &             &                &        & Heat eq.\ + BCs \\
+$w^1$             & $\bullet$ & $\bullet$ &             &                &        & Heat eq.\ + BCs \\
+$\phi_s$          & $\bullet$ &           & $\bullet$   &                &        & Dynamic BC~\eqref{eq:nd_dyn} \\
+$\phi_{\mathrm{bulk}}$ & $\bullet$ &     & $\bullet$   & $\bullet$      &        & Laplace eq. \\
+$\eta$            & $\bullet$ &           &             & $\bullet$      & $\bullet$ & Kinematic BC~\eqref{eq:nd_kin} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The block lower-triangular structure arises because:
+\begin{itemize}
+    \item The $w^3$ block depends only on $w^{3,n+1}$ (implicitly) and $\phi^n$ (explicitly, in the RHS).
+    \item The $w^1$ block depends on $w^{1,n+1}$ and $w^{3,n+1}$ (through the stress-free surface BC).
+    \item The $\phi_s$ block depends on $\phi_s^{n+1}$ and $w^{3,n+1}$ (through $\partial_z w^3$).
+    \item The Laplace block depends on $\phi_{\mathrm{bulk}}^{n+1}$, $\phi_s^{n+1}$ (Dirichlet top), and $w^{3,n+1}$ (ghost point at bottom).
+    \item The $\eta$ block depends on $\eta^{n+1}$, $\phi_{\mathrm{bulk}}^{n+1}$ (through $\phi_z$), and $w^{3,n+1}_s$.
+\end{itemize}
+
+\subsubsection{Key property: constant coefficient matrix}
+
+Since all governing equations are linear with constant coefficients, the matrix $A$ depends only on grid parameters ($n_x$, $n_z$, $\Delta x$, $\Delta z$), the time step $\Delta t$, and the dimensionless numbers ($\Fr$, $\We$, $\Rey$)---not on the solution.
+Therefore, $A$ is factored once at setup time via sparse LU decomposition:
+\begin{equation}
+    A = LU \quad \text{(computed once)}.
+\end{equation}
+At each time step, the right-hand side $\bb(\xx^n)$ is assembled from the current state, and the new state is obtained by back-substitution:
+\begin{equation}
+    \xx^{n+1} = U^{-1}(L^{-1}\bb(\xx^n)) \quad \text{($\OO(N)$ per step)}.
+\end{equation}
+
+For our grid ($n_x = 300$, $n_z = 30$), the monolithic system has $N_{\mathrm{total}} = 27{,}600$ unknowns with approximately $134{,}400$ nonzero entries.
+The LU factorisation takes approximately $0.06$~s and each back-substitution approximately $1.9$~ms, compared to the sequential solver which requires approximately $34$~ms per step.
+
+
+%% ================================================================
+%% 4. RESULTS
+%% ================================================================
+\section{Results}
+\label{sec:results}
+
+% TODO: This section will be populated with simulation results.
+% Currently verified:
+%
+% 1. Sequential vs monolithic equivalence
+%    - Max |eta_seq - eta_mono| = O(machine epsilon) over all time steps
+%    - Solutions match to 15+ significant digits
+%
+% 2. Physical verification (from notebook):
+%    - Energy monotonically decreasing (no spurious growth)
+%    - Mass conserved (integral of eta = const)
+%    - Non-slip BC satisfied: max|u| at bottom ~ 0
+%    - Vorticity decays due to viscous diffusion
+%
+% 3. Performance:
+%    - Monolithic: ~1.9 ms/step (LU backsolve)
+%    - Sequential: ~34 ms/step (multiple spsolve calls)
+%    - Speedup: ~18x
+%
+% Planned figures:
+%    - Surface elevation evolution
+%    - Velocity potential contours
+%    - Velocity field (nabla phi + w)
+%    - Energy dissipation curves (log scale)
+%    - Mass conservation check
+%    - Monolithic vs sequential comparison
+%    - Convergence study (grid refinement)
+
+
+%% ================================================================
+%% 5. DISCUSSION
+%% ================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+% TODO: Write discussion. Planned topics:
+%
+% - Advantage of solving full (2.15e) vs diagnostic relation (2.17)
+% - Computational cost: O(N^{1.5}) setup + O(N) per step
+% - Limitations: 2D Cartesian, linearised curvature, implicit Euler (first order)
+% - Extensions: VS-BDF2 for second-order time accuracy, axisymmetric coordinates,
+%   coupling to membrane/solid body dynamics, external forcing (Faraday waves)
+
+
+%% ================================================================
+%% 6. CONCLUSIONS
+%% ================================================================
+\section{Conclusions}
+\label{sec:conclusions}
+
+% TODO: Write conclusions. Key points:
+%
+% - Implemented full LNS model (eqs 2.15a-e) with non-slip bottom BC
+% - Monolithic A x = b formulation: factor once, backsolve each step
+% - Machine-precision agreement with sequential solver
+% - ~18x speedup over sequential approach
+% - Framework ready for coupling to membrane/body dynamics
+
+
+%% ================================================================
+%% BIBLIOGRAPHY
+%% ================================================================
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+\end{document}
