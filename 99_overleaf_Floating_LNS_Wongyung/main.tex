@@ -68,10 +68,11 @@ The model solves the coupled system of Laplace's equation for the velocity poten
 We implement both a sequential (operator-splitting) solver and a monolithic formulation in which all unknowns---the vortical components $w^3$ and $w^1$, the surface potential $\phi_s$, the bulk potential $\phi$, and the surface elevation $\eta$---are assembled into a single linear system $A\xx = \bb$.
 Because the coefficient matrix $A$ is independent of the solution, it is factored once via sparse LU decomposition; each subsequent time step requires only $\OO(N)$ back-substitution.
 We verify that the two formulations produce identical results to machine precision and demonstrate the computational advantage of the monolithic approach.
-% TODO: Add 1--2 sentences on key quantitative results.
+We further extend the same monolithic framework to fluid--body coupling by augmenting the unknown vector with the surface pressure, vertical position, and vertical velocity of a floating rigid body, yielding a fully implicit solver in which the body motion is determined self-consistently by Newton's second law driven by gravity and the integrated fluid pressure.
+% TODO: Add 1--2 sentences on key quantitative results once validation is complete.
 \end{abstract}
 
-\keywords{Free surface dynamics \and linearised Navier--Stokes \and Helmholtz decomposition \and monolithic solver \and LU prefactorisation \and finite differences}
+\keywords{Free surface dynamics \and linearised Navier--Stokes \and Helmholtz decomposition \and monolithic solver \and LU prefactorisation \and fluid--body coupling \and floating rigid body \and finite differences}
 
 %% ================================================================
 %% 1. INTRODUCTION
@@ -107,9 +108,16 @@ Because all equations are linear with constant coefficients, the matrix $A$ does
 It is factored once via sparse LU decomposition at setup time, and each time step reduces to a single back-substitution at $\OO(N)$ cost.
 We verify that the monolithic and sequential solvers produce identical results to machine precision, confirming the equivalence of the two formulations.
 
+We then extend this framework to fluid--body coupling.
+A flat-bottomed rigid body of finite width is placed on the free surface, and its motion is determined self-consistently by Newton's second law driven by gravity and the integrated fluid pressure.
+Under the wetted region of the body, the standard free-surface boundary conditions are replaced by three constraints: a geometric constraint ($\eta$ matches the body position), a kinematic match (the vertical fluid velocity matches the body velocity), and horizontal no-slip at the body bottom.
+The surface pressure $p_s$ acts as a Lagrange multiplier enforcing the kinematic match.
+Augmenting the unknown vector by $p_s$ and the two body scalars $z_b, v_b$, the entire coupled system remains linear with constant coefficients, so it too is amenable to a one-time LU prefactorisation.
+This fully implicit coupling avoids the added-mass instability that is known to afflict staggered fluid--body coupling schemes, particularly for light bodies.
+
 The remainder of this paper is organised as follows.
-Section~\ref{sec:formulation} presents the mathematical model: the Helmholtz decomposition, the governing equations in the bulk and at the boundaries, and the non-dimensionalisation.
-Section~\ref{sec:numerical} describes the numerical methods: finite difference discretisation, the sequential time-stepping algorithm, and the monolithic system assembly.
+Section~\ref{sec:formulation} presents the mathematical model: the Helmholtz decomposition, the governing equations in the bulk and at the boundaries, the non-dimensionalisation, and the extension to fluid--body coupling for a floating rigid body.
+Section~\ref{sec:numerical} describes the numerical methods: finite difference discretisation, the sequential time-stepping algorithm, the monolithic system assembly for the pure fluid problem, and the augmented monolithic system for the coupled fluid--body problem.
 Section~\ref{sec:results} presents numerical results.
 % TODO: Expand outline once results are finalised.
 
@@ -238,6 +246,65 @@ The dimensionless governing equations become:
     \partial_z w^1 = -(\partial_{xz}\phi + \partial_x w^3) \quad \text{at } z = 0. \label{eq:nd_surf_w1}
 \end{equation}
 
+\subsection{Extension to a floating rigid body}
+\label{sec:floating_body}
+
+The LNS framework extends naturally to the case of a rigid body floating on the fluid surface.
+We consider a flat-bottomed rectangular body of half-width $a$ and mass per unit length $m$, centred at $x = x_c$, whose bottom lies at dimensional vertical position $z'_b(t')$ with vertical velocity $v'_b(t') = \mathrm{d} z'_b / \mathrm{d} t'$.
+At $t' = 0$ the body is in contact with the fluid surface.
+Unlike prescribed-motion formulations, the body motion here is determined self-consistently by Newton's second law driven by gravity and the integrated fluid pressure.
+
+\paragraph{Body equations of motion.}
+In dimensionless form, with $M = m/(\rho L_c^2)$ denoting the dimensionless mass per unit length,
+\begin{align}
+    \frac{\mathrm{d} z_b}{\mathrm{d} t} &= v_b, \label{eq:body_kin} \\
+    M\,\frac{\mathrm{d} v_b}{\mathrm{d} t} &= -\frac{M}{\Fr} + \int_{|x - x_c| < a} p_s(x, t)\,\mathrm{d} x, \label{eq:body_dyn}
+\end{align}
+where $p_s$ is the surface pressure.
+The integral in~\eqref{eq:body_dyn} represents the net upward force exerted by the fluid on the wetted region of the body.
+
+\paragraph{Boundary conditions under the wetted region.}
+Let $\mathcal{B}(t) = \{x : |x - x_c| < a\}$ denote the wetted region.
+Under $\mathcal{B}$, the standard free-surface boundary conditions are replaced by three conditions imposed by the presence of the solid body:
+\begin{enumerate}
+    \item \emph{Surface follows the body} (geometric constraint):
+    \begin{equation}
+        \eta(x, t) = z_b(t), \qquad x \in \mathcal{B}(t). \label{eq:body_eta_constraint}
+    \end{equation}
+    \item \emph{Kinematic match} (no-penetration at the body bottom):
+    \begin{equation}
+        \partial_z \phi + w^3 = v_b(t), \qquad x \in \mathcal{B}(t), \; z = 0. \label{eq:body_kin_match}
+    \end{equation}
+    This replaces the free-surface kinematic condition~\eqref{eq:nd_kin} under the body; its compatibility with~\eqref{eq:body_eta_constraint} follows from $\mathrm{d} z_b / \mathrm{d} t = v_b$.
+    \item \emph{Horizontal no-slip} at the body bottom:
+    \begin{equation}
+        \partial_x \phi + w^1 = 0, \qquad x \in \mathcal{B}(t), \; z = 0. \label{eq:body_noslip}
+    \end{equation}
+    This replaces the surface stress-free condition~\eqref{eq:nd_surf_w1} under the body.
+\end{enumerate}
+The dynamic boundary condition~\eqref{eq:nd_dyn} continues to hold at $z = 0$ everywhere, but under $\mathcal{B}$ the surface pressure $p_s$ is no longer prescribed to zero---it becomes an unknown whose role is that of a Lagrange multiplier enforcing the kinematic match~\eqref{eq:body_kin_match}.
+Outside the wetted region, $p_s = 0$ and the standard free-surface boundary conditions~\eqref{eq:nd_kin}--\eqref{eq:nd_vort} and~\eqref{eq:nd_surf_w1} apply.
+
+\paragraph{Summary of the coupled problem.}
+The full coupled fluid--body problem thus consists of the bulk fluid equations~\eqref{eq:nd_laplace}--\eqref{eq:nd_heat}, the piecewise-defined surface boundary conditions summarised in Table~\ref{tab:body_bcs}, the body equations of motion~\eqref{eq:body_kin}--\eqref{eq:body_dyn}, and the bottom non-slip conditions~\eqref{eq:nd_bot_w3}--\eqref{eq:nd_bot_w1}.
+The additional unknowns introduced by the body are the surface pressure field $p_s(x, t)$ (supported only on $\mathcal{B}$), together with the two scalar body states $z_b(t)$ and $v_b(t)$.
+
+\begin{table}[H]
+    \centering
+    \caption{Surface boundary conditions as a function of region.  The dynamic condition~\eqref{eq:nd_dyn} applies uniformly, but with $p_s$ prescribed to zero outside the body and left as an unknown inside.}
+    \label{tab:body_bcs}
+    \begin{tabular}{lll}
+        \toprule
+        Region & Free surface ($x \notin \mathcal{B}$) & Wetted body ($x \in \mathcal{B}$) \\
+        \midrule
+        Surface elevation & $\partial_t \eta = \partial_z\phi + w^3$ & $\eta = z_b$ \\
+        Kinematic & (evolves $\eta$) & $\partial_z\phi + w^3 = v_b$ \\
+        Horizontal vortical $w^1$ & $\partial_z w^1 = -(\partial_{xz}\phi + \partial_x w^3)$ & $\partial_x\phi + w^1 = 0$ \\
+        Surface pressure & $p_s = 0$ & $p_s$ unknown \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
 
 %% ================================================================
 %% 3. NUMERICAL METHODS
@@ -299,7 +366,7 @@ Equation~\eqref{eq:nd_dyn} is discretised implicitly in the diffusion term:
 where $\kappa[\eta] = \Delta_H\eta$ (linearised curvature) and $(D_z\,w^3)_s = (w^3_{n_z-1} - w^3_{n_z-2})/\Delta z$.
 
 \paragraph{Step 3: Solve Laplace equation for bulk $\phi$.}
-With the updated surface Dirichlet condition $\phi_{n_z-1,j} = \phi_s^{n+1}_j$ and the bottom ghost-point condition enforcing $\partial_z\phi = -w^{3,n+1}_0$ (from~\eqref{eq:nd_bot_w3}), we solve:
+With the updated surface Dirichlet condition $\phi_{n_z-1,j} = (\phi_s)_j^{n+1}$ and the bottom ghost-point condition enforcing $\partial_z\phi = -w^{3,n+1}_0$ (from~\eqref{eq:nd_bot_w3}), we solve:
 \begin{equation}
     A_{\text{Lap}}\,\vec{\phi}^{n+1} = \vec{b}_{\text{Lap}}, \label{eq:laplace_disc}
 \end{equation}
@@ -370,6 +437,82 @@ At each time step, the right-hand side $\bb(\xx^n)$ is assembled from the curren
 For our grid ($n_x = 300$, $n_z = 30$), the monolithic system has $N_{\mathrm{total}} = 27{,}600$ unknowns with approximately $134{,}400$ nonzero entries.
 The LU factorisation takes approximately $0.06$~s and each back-substitution approximately $1.9$~ms, compared to the sequential solver which requires approximately $34$~ms per step.
 
+\subsection{Augmented monolithic system with body coupling}
+\label{sec:augmented_monolithic}
+
+To solve the coupled fluid--body problem described in Section~\ref{sec:floating_body}, we extend the monolithic approach of Section~\ref{sec:monolithic} by augmenting the unknown vector with the surface pressure field and the two scalar body states.
+Remarkably, the resulting system retains the same property as the pure fluid system: the coefficient matrix is constant in time and can be factored once via LU decomposition, after which each time step costs only a single back-substitution.
+
+\subsubsection{Augmented unknown vector}
+
+At time level $n+1$, the augmented state vector is
+\begin{equation}
+    \xx = \begin{pmatrix} \vec{w}^3 \\ \vec{w}^1 \\ \vec{\phi} \\ \vec{\eta} \\ \vec{p}_s \\ z_b \\ v_b \end{pmatrix}, \qquad N_{\mathrm{total}} = 3\,n_z n_x + 2\,n_x + 2,
+    \label{eq:augmented_state}
+\end{equation}
+where we have replaced the separate surface and bulk potential vectors of~\eqref{eq:state_vector} with a single $\phi$ vector covering all grid points (the surface row at $i = n_z - 1$ carries the values formerly denoted $\phi_s$), and introduced three new components: the surface pressure $\vec{p}_s \in \mathbb{R}^{n_x}$ (with $p_{s,j} = 0$ enforced for $j \notin \mathcal{B}$), and the scalar body states $z_b, v_b \in \mathbb{R}$.
+
+\subsubsection{Piecewise surface boundary conditions}
+
+Let $\chi_j = 1$ if node $j \in \mathcal{B}$ and zero otherwise.
+The surface rows of the monolithic matrix differ between free and wetted nodes according to Table~\ref{tab:body_bcs}:
+
+\paragraph{$\eta$ rows.}
+For free $j$: the discretised kinematic condition~\eqref{eq:nd_kin},
+\begin{equation}
+    \eta_j^{n+1} - \frac{\Delta t}{\Delta z}\left(\phi_{n_z-1,j}^{n+1} - \phi_{n_z-2,j}^{n+1}\right) - \Delta t\, w^{3,n+1}_{n_z-1,j} = \eta_j^n.
+\end{equation}
+For body $j$: the geometric constraint~\eqref{eq:body_eta_constraint},
+\begin{equation}
+    \eta_j^{n+1} - z_b^{n+1} = 0.
+\end{equation}
+
+\paragraph{$w^1$ surface rows.}
+For free $j$: the stress-free condition~\eqref{eq:nd_surf_w1}.
+For body $j$: the horizontal no-slip condition~\eqref{eq:body_noslip},
+\begin{equation}
+    w^{1,n+1}_{n_z-1,j} + \left(D_x\,\vec{\phi}_{n_z-1}^{n+1}\right)_j = 0,
+\end{equation}
+which couples the surface vortical component to the surface potential via the discrete first-derivative operator $D_x$.
+
+\paragraph{$p_s$ rows.}
+For free $j$: the prescribed value
+\begin{equation}
+    p_{s,j}^{n+1} = 0.
+\end{equation}
+For body $j$: the kinematic matching condition~\eqref{eq:body_kin_match},
+\begin{equation}
+    \frac{\phi_{n_z-1,j}^{n+1} - \phi_{n_z-2,j}^{n+1}}{\Delta z} + w^{3,n+1}_{n_z-1,j} - v_b^{n+1} = 0.
+\end{equation}
+These rows serve dual purposes: pinning the pressure to zero outside the body, and enforcing the no-penetration constraint (with $p_s$ as the Lagrange multiplier) inside.
+
+\paragraph{Surface dynamic BC (uniform).}
+The dynamic condition~\eqref{eq:nd_dyn} is discretised uniformly for all surface nodes $j$, with the $p_s$ term always present:
+\begin{equation}
+    \left(I - \frac{2\Delta t}{\Rey}\,\Delta_H\right)\phi_{n_z-1,j}^{n+1} + \frac{2\Delta t}{\Rey}\,\frac{w^{3,n+1}_{n_z-1,j} - w^{3,n+1}_{n_z-2,j}}{\Delta z} + \Delta t\, p_{s,j}^{n+1} = \phi_{n_z-1,j}^n - \frac{\Delta t}{\Fr}\eta_j^n + \frac{\Delta t}{\We}\kappa[\eta^n]_j.
+\end{equation}
+For free $j$, $p_{s,j}^{n+1} = 0$ is enforced by the separate $p_s$ row above, so this reduces to~\eqref{eq:phi_s_disc}.
+
+\subsubsection{Body dynamics rows}
+
+Implicit Euler discretisation of~\eqref{eq:body_kin}--\eqref{eq:body_dyn} yields two additional rows:
+\begin{align}
+    z_b^{n+1} - \Delta t\, v_b^{n+1} &= z_b^n, \label{eq:zb_disc} \\
+    M\, v_b^{n+1} - \Delta t\,\Delta x \sum_{j \in \mathcal{B}} p_{s,j}^{n+1} &= M\, v_b^n - \frac{\Delta t\, M}{\Fr}. \label{eq:vb_disc}
+\end{align}
+The sum in~\eqref{eq:vb_disc} is the midpoint approximation to the integrated fluid pressure over the wetted region.
+These two rows close the augmented system.
+
+\subsubsection{Block structure and matrix properties}
+
+The augmented matrix retains a block lower-triangular structure with respect to the main dependencies, with off-diagonal coupling blocks between $\phi$ and $\{w^3, p_s, \eta\}$, and between $v_b$ and $p_s$ (via the pressure integral).
+Crucially, all coefficients are determined by grid parameters, $\Delta t$, the dimensionless numbers ($\Fr$, $\We$, $\Rey$), the body parameters ($M$, $a$, $x_c$), and the time-independent body mask $\chi$.
+None depend on the solution.
+Therefore, the augmented matrix is factored once via sparse LU decomposition at setup time, and each subsequent time step reduces to a single back-substitution.
+The augmented system has $N_{\mathrm{total}} = 3\,n_z n_x + 2\,n_x + 2$ unknowns, increased only by $n_x + 2$ compared with the pure fluid system.
+
+% TODO: Quote actual LU factorisation and per-step timings for augmented system once benchmarked at production resolution.
+
 
 %% ================================================================
 %% 4. RESULTS
@@ -395,7 +538,7 @@ The LU factorisation takes approximately $0.06$~s and each back-substitution app
 %    - Sequential: ~34 ms/step (multiple spsolve calls)
 %    - Speedup: ~18x
 %
-% Planned figures:
+% Planned figures for the pure fluid problem:
 %    - Surface elevation evolution
 %    - Velocity potential contours
 %    - Velocity field (nabla phi + w)
@@ -403,6 +546,20 @@ The LU factorisation takes approximately $0.06$~s and each back-substitution app
 %    - Mass conservation check
 %    - Monolithic vs sequential comparison
 %    - Convergence study (grid refinement)
+%
+% Planned items for the coupled fluid-body problem (v2):
+%    - Smoke test passes: p_s = 0 off body (machine precision), p_s profile
+%      under body is physically reasonable (concentration near edges),
+%      integrated force converges toward equilibrium M/Fr.
+%    - Release-from-rest test: body dropped at z_b(0) = 0, v_b(0) = 0, expect
+%      damped oscillation toward hydrostatic equilibrium.
+%    - Drop-impact test: body with initial downward velocity, expect
+%      deceleration, rebound, and wave radiation.
+%    - Free-oscillation period: compare with added-mass theory prediction
+%      T ~ 2 pi sqrt(M_eff / (2 a rho g / L)).
+%    - Energy balance: KE_body + PE_body + fluid energy + viscous dissipation
+%      should be conserved to discretisation error.
+%    - Timing benchmark of augmented monolithic at production resolution.
 
 
 %% ================================================================
@@ -415,9 +572,17 @@ The LU factorisation takes approximately $0.06$~s and each back-substitution app
 %
 % - Advantage of solving full (2.15e) vs diagnostic relation (2.17)
 % - Computational cost: O(N^{1.5}) setup + O(N) per step
-% - Limitations: 2D Cartesian, linearised curvature, implicit Euler (first order)
+% - Fully implicit fluid-body coupling: avoids the added-mass instability
+%   that afflicts staggered (operator-split) fluid-body schemes, especially
+%   for light bodies (Jodlbauer et al. 2018; FloatStepper, 2024).
+% - Pressure as Lagrange multiplier: natural interpretation, directly
+%   connected to the constraint of no-penetration at the body bottom.
+% - Limitations: 2D Cartesian, linearised curvature, implicit Euler (first order),
+%   flat-bottomed rigid body only, no contact-line dynamics, no body
+%   separation/reattachment.
 % - Extensions: VS-BDF2 for second-order time accuracy, axisymmetric coordinates,
-%   coupling to membrane/solid body dynamics, external forcing (Faraday waves)
+%   curved bodies, multiple bodies, membrane instead of rigid body,
+%   external forcing (Faraday waves), sphere impact (Galeano-Rios 2017).
 
 
 %% ================================================================
@@ -432,7 +597,12 @@ The LU factorisation takes approximately $0.06$~s and each back-substitution app
 % - Monolithic A x = b formulation: factor once, backsolve each step
 % - Machine-precision agreement with sequential solver
 % - ~18x speedup over sequential approach
-% - Framework ready for coupling to membrane/body dynamics
+% - Extended the monolithic framework to a floating rigid body with
+%   self-consistent dynamics: surface pressure becomes a Lagrange multiplier
+%   enforcing the kinematic match under the wetted region, and Newton's
+%   second law for the body is added as two additional rows. The augmented
+%   system retains the constant-coefficient property and admits the same
+%   one-time LU prefactorisation.
 
 
 %% ================================================================
