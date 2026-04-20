@@ -1,0 +1,22 @@
+\frametitle{Smoke-test: release from rest}
+\textbf{Parameters} (small grid for quick iteration):
+\begin{itemize}
+\small
+\item Grid $n_x \times n_z = 80 \times 20$, $\Delta t = 5$ ms, 30 steps ($t_{\text{end}} = 0.15$ s)
+\item $m = 0.5$ g/cm, $2a = 10$ cm; $\Fr=1.02$, $\We=35.7$, $\Rey=2.5\!\times\!10^5$
+\item Initial condition: $z_b(0)=0,\ v_b(0)=0$ (released from rest at undisturbed level)
+\end{itemize}
+
+\vspace{0.5em}
+\textbf{Solver output}:
+\begin{block}{}
+\begin{verbatim}
+FloatingObjectSolverV2 initialised
+  Grid: 80x20, Body: 2a=10.0 cm, M_dim=0.0800
+  Body nodes: 15/80
+  Monolithic size N = 4962, nnz = 23938
+  Matrix build: 0.02s,  LU factor: 0.01s
+  ...
+  Step    30 | t=0.150s | z_b=-0.593mm | v_b=-0.317cm/s | F=+7.88e-02
+\end{verbatim}
+\end{block}

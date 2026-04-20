@@ -1,10 +1,6 @@
 """
 Floating object v2 — self-consistent body dynamics via monolithic constraint solve.
 
-Extends the LNS free-surface solver of Galeano-Rios, Milewski & Vanden-Broeck
-(2017) to include a floating rigid body whose motion is determined self-
-consistently by Newton's second law driven by gravity and the integrated fluid
-pressure (not prescribed, as in v1).
 
 Physics:
     At t=0, a flat-bottomed rigid body of half-width a and mass M (per unit

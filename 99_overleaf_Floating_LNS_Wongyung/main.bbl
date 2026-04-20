@@ -1,0 +1,59 @@
+\begin{thebibliography}{9}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Galeano-Rios et~al.(2017)Galeano-Rios, Milewski, and Vanden-Broeck]{GaleanoRiosEtAl2017}
+Carlos~A Galeano-Rios, Paul~A Milewski, and Jean-Marc Vanden-Broeck.
+\newblock Non-wetting impact of a sphere onto a bath and its application to bouncing droplets.
+\newblock \emph{Journal of Fluid Mechanics}, 826:\penalty0 97--127, 2017.
+\newblock \doi{10.1017/jfm.2017.424}.
+
+\bibitem[Milewski et~al.(2015)Milewski, Galeano-Rios, Nachbin, and Bush]{MilweskiEtAl2015}
+Paul~A Milewski, Carlos~A Galeano-Rios, Andr\'{e} Nachbin, and John W~M Bush.
+\newblock Faraday pilot-wave dynamics: modelling and computation.
+\newblock \emph{Journal of Fluid Mechanics}, 778:\penalty0 361--388, 2015.
+\newblock \doi{10.1017/jfm.2015.386}.
+
+\bibitem[Galeano-Rios(2016)]{GaleanoRios2016}
+Carlos~A Galeano-Rios.
+\newblock \emph{Hydrodynamic Pilot-waves: Resonance, Wave-particle Duality, and an Analogy to Quantum Tunnelling}.
+\newblock PhD thesis, Instituto de Matem\'{a}tica Pura e Aplicada (IMPA), Rio de Janeiro, Brazil, 2016.
+
+\bibitem[Barotta et~al.(2025)Barotta, Thomson, Harris, and Bush]{Barotta2025}
+Jean-Christophe Barotta, Stuart~J Thomson, Daniel~M Harris, and John W~M Bush.
+\newblock Macroscopic {B}rownian motion on a chaotic fluid interface.
+\newblock \emph{Physical Review Letters}, 2025.
+
+\bibitem[Ag{\"u}ero et~al.(2022)Ag{\"u}ero, Alventosa, Harris, and Galeano-Rios]{AgueroEtAl2022}
+Elvis~A Ag{\"u}ero, Luke Alventosa, Daniel~M Harris, and Carlos~A Galeano-Rios.
+\newblock Impact of a rigid sphere onto an elastic membrane.
+\newblock \emph{Proceedings of the Royal Society A}, 478\penalty0 (2266):\penalty0 20220340, 2022.
+\newblock \doi{10.1098/rspa.2022.0340}.
+
+\bibitem[Lamb(1932)]{Lamb1932}
+Horace Lamb.
+\newblock \emph{Hydrodynamics}.
+\newblock Cambridge University Press, Cambridge, 6th edition, 1932.
+
+\bibitem[Batchelor(1967)]{Batchelor1967}
+George~K Batchelor.
+\newblock \emph{An Introduction to Fluid Dynamics}.
+\newblock Cambridge University Press, Cambridge, 1967.
+\newblock \doi{10.1017/CBO9780511800955}.
+
+\bibitem[Hughes et~al.(1981)Hughes, Liu, and Zimmermann]{HughesLiuZimmermann1981}
+Thomas J~R Hughes, Wing~Kam Liu, and Thomas~K Zimmermann.
+\newblock Lagrangian--{E}ulerian finite element formulation for incompressible viscous flows.
+\newblock \emph{Computer Methods in Applied Mechanics and Engineering}, 29\penalty0 (3):\penalty0 329--349, 1981.
+\newblock \doi{10.1016/0045-7825(81)90049-9}.
+
+\bibitem[Donea et~al.(2004)Donea, Huerta, Ponthot, and Rodr\'{\i}guez-Ferran]{DoneaEtAl2004}
+Jean Donea, Antonio Huerta, Jean-Philippe Ponthot, and Antonio Rodr\'{\i}guez-Ferran.
+\newblock Arbitrary {L}agrangian--{E}ulerian methods.
+\newblock In Erwin Stein, Ren\'{e} de~Borst, and Thomas J~R Hughes, editors, \emph{Encyclopedia of Computational Mechanics}, volume~1, chapter~14, pages 413--437. John Wiley \& Sons, 2004.
+\newblock \doi{10.1002/0470091355.ecm009}.
+
+\end{thebibliography}

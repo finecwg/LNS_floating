@@ -36,15 +36,15 @@
 %\date{} 					% Or removing it
 
 \author{
-  [Author~1]\thanks{Corresponding author.} \\
-  [Department] \\
-  [University] \\
-  \texttt{[email]} \\
+  {Author~One}\thanks{Corresponding author.} \\
+  {Department} \\
+  {University} \\
+  \texttt{author1@example.com} \\
   \And
-  [Author~2] \\
-  [Department] \\
-  [University] \\
-  \texttt{[email]} \\
+  {Author~Two} \\
+  {Department} \\
+  {University} \\
+  \texttt{author2@example.com} \\
 }
 
 \renewcommand{\shorttitle}{Monolithic LNS free-surface solver}
@@ -52,7 +52,7 @@
 \hypersetup{
   pdftitle={A monolithic solver for linearised Navier--Stokes free-surface dynamics via Helmholtz decomposition},
   pdfsubject={physics.flu-dyn, math.NA},
-  pdfauthor={[Author 1], [Author 2]},
+  pdfauthor={Author One, Author Two},
   pdfkeywords={free surface dynamics, linearised Navier--Stokes, Helmholtz decomposition, monolithic solver, LU prefactorisation},
 }
 
@@ -149,6 +149,12 @@ where $\phi(x', z', t')$ is the velocity potential and $\ww(x', z', t')$ is the 
 Both fields are solenoidal: $\Delta\phi = 0$ (by construction) and $\nabla \cdot \ww = 0$ (from incompressibility).
 In two dimensions, $\ww = (w^1, w^3)$ has a horizontal component $w^1$ and a vertical component $w^3$; the out-of-plane component $w^2 = 0$ by symmetry.
 
+The appeal of this decomposition is twofold.
+First, the irrotational part $\nabla\phi$ satisfies Laplace's equation in the bulk---a time-independent elliptic problem that can be solved by standard sparse linear algebra once the boundary data at the free surface and the bottom are specified.
+Second, the vortical part $\ww$ is governed by linear parabolic (heat) equations, which carry all of the viscous and vorticity-generating effects.
+For free-surface flows at moderate-to-high Reynolds numbers, the bulk flow is dominated by the potential component, while the vortical component is predominantly concentrated in thin boundary layers near the surface and the solid bottom.
+The decomposition thus isolates viscous effects into compact regions, leading to a system of linear partial differential equations whose structure is amenable to efficient time stepping.
+
 \subsection{Governing equations}
 \label{sec:governing}
 
@@ -159,10 +165,17 @@ In the interior of the fluid domain ($z' < 0$), the potential satisfies Laplace'
     \Delta\phi &= 0, \label{eq:laplace} \\
     \partial_{t'} w^{\prime i} &= \nu\, \Delta w^{\prime i}, \quad i = 1, 3. \label{eq:heat}
 \end{align}
+Equation~\eqref{eq:laplace} follows from the identity $\nabla \cdot (\nabla\phi) = \Delta\phi$ combined with the imposed solenoidal property of the potential part, and it is time-independent: the potential field adjusts instantaneously to the boundary data at the surface and the bottom.
+Equation~\eqref{eq:heat} follows from taking the curl of the linearised Navier--Stokes equation and using the orthogonality of $\nabla\phi$ and $\ww$; it expresses the fact that, in the bulk, the vortical field diffuses with kinematic viscosity $\nu$ and does not self-advect (a consequence of the linearisation).
+The coupling between $\phi$ and $\ww$ is therefore entirely contained in the boundary conditions at $z' = 0$ and $z' = -D'$, presented next.
 
-\subsubsection{Free-surface boundary conditions ($z' = 0$)}
+\subsubsection{Free-surface boundary conditions (\texorpdfstring{$z' = 0$}{z' = 0})}
 
-The linearised boundary conditions at the free surface are (cf.\ \citealt{GaleanoRiosEtAl2017}, equations~2.15c--e):
+Under the small-amplitude assumption $|\eta'| \ll D'$, the free-surface boundary conditions can be evaluated at the mean surface level $z' = 0$ rather than at the actual deformed surface $z' = \eta'$.
+This linearisation is the essential simplification that turns an otherwise nonlinear moving-boundary problem into a linear system on a fixed domain.
+Three physical requirements must be imposed at the free surface: a \emph{kinematic} condition stating that the surface moves with the fluid, a \emph{dynamic} condition balancing normal stresses at the interface, and a \emph{vorticity} condition derived from the evolution of the tangential vortical component.
+In addition, a \emph{stress-free} condition on the horizontal vortical component $w^1$ closes the system.
+All four conditions are given below in their dimensional form (cf.\ \citealt{GaleanoRiosEtAl2017}, equations~2.15c--e and~2.11a):
 
 \paragraph{Kinematic condition (2.15c):}
 The surface moves with the fluid:
@@ -173,10 +186,16 @@ The surface moves with the fluid:
 \paragraph{Dynamic condition (2.15d):}
 The normal stress balance at the free surface:
 \begin{equation}
-    \partial_{t'}\phi'_s = -g\eta' + \frac{\sigma}{\rho}\,\partial_{x'x'}\eta' + 2\nu\,\partial_{x'x'}\phi'_s - \frac{2\nu\,\partial_{z'} w^{\prime 3}}{\,} - \frac{p'_s}{\rho}, \label{eq:surf_dyn}
+    \partial_{t'}\phi'_s = -g\eta' + \frac{\sigma}{\rho}\,\partial_{x'x'}\eta' + 2\nu\,\partial_{x'x'}\phi'_s - 2\nu\,\partial_{z'} w^{\prime 3} - \frac{p'_s}{\rho}, \label{eq:surf_dyn}
 \end{equation}
-where $\phi'_s(x', t') = \phi'(x', 0, t')$ is the surface velocity potential, $\partial_{x'x'}$ is the horizontal Laplacian (which equals $\Delta_H$ in 2D), $p'_s$ is an externally applied surface pressure (zero in our case), and the curvature $\kappa[\eta'] \approx \partial_{x'x'}\eta'$ under the linearisation assumption.
-Note the term $-2\nu\,\partial_{z'} w^{\prime 3}$, which represents the viscous contribution from the vertical gradient of the vortical field.
+where $\phi'_s(x', t') = \phi'(x', 0, t')$ is the surface velocity potential, $\partial_{x'x'}$ is the horizontal Laplacian (which equals $\Delta_H$ in 2D), $p'_s$ is an externally applied surface pressure (zero for an uncovered free surface), and $\kappa[\eta']$ is the mean curvature of the interface.
+Under the linearisation assumption, $\kappa[\eta'] \approx \partial_{x'x'}\eta'$.
+The four right-hand terms admit a clear physical interpretation:
+the first ($-g\eta'$) is the hydrostatic restoring force that drives gravity waves;
+the second ($\sigma\kappa/\rho$) is the capillary restoring force from surface tension;
+the third ($2\nu\,\partial_{x'x'}\phi'_s$) is the tangential viscous stress associated with the horizontal curvature of the potential at the surface;
+and the fourth ($-2\nu\,\partial_{z'} w^{\prime 3}$) captures the viscous coupling between the vortical field and the surface potential via the vertical gradient of $w^{\prime 3}$.
+The last term is crucial: it is the reason the surface potential and the vortical component do not decouple, even under the linearisation.
 
 \paragraph{Vorticity evolution (2.15e):}
 The surface vorticity evolves according to:
@@ -184,7 +203,7 @@ The surface vorticity evolves according to:
     \partial_{t'} w^{\prime 3} = 2\nu\, \partial_{x'x'}\!\left(\partial_{z'}\phi' + w^{\prime 3}\right). \label{eq:surf_vort}
 \end{equation}
 
-\subsubsection{Bottom boundary condition ($z' = -D'$)}
+\subsubsection{Bottom boundary condition (\texorpdfstring{$z' = -D'$}{z' = -D'})}
 
 The non-slip condition $\uu = 0$ at the solid bottom requires, via the decomposition~\eqref{eq:helmholtz}:
 \begin{align}
@@ -192,7 +211,7 @@ The non-slip condition $\uu = 0$ at the solid bottom requires, via the decomposi
     w^{\prime 1} &= -\partial_{x'}\phi' \quad \text{at } z' = -D'. \label{eq:bc_bot_w1}
 \end{align}
 
-\subsubsection{Stress-free condition for $w^1$ at the surface}
+\subsubsection{Stress-free condition for \texorpdfstring{$w^1$}{w\textasciicircum 1} at the surface}
 
 The tangential stress-free condition at the free surface (cf.\ \citealt{GaleanoRiosEtAl2017}, equation~2.11a) gives:
 \begin{equation}
@@ -200,9 +219,16 @@ The tangential stress-free condition at the free surface (cf.\ \citealt{GaleanoR
 \end{equation}
 
 \paragraph{Remark on equation (2.17).}
-Combining \eqref{eq:surf_kin} and \eqref{eq:surf_vort} and integrating in time, one can derive the diagnostic relation $w^3 = (2\nu/\text{etc.})\,\Delta_H\eta$ at the surface \citep{GaleanoRiosEtAl2017}.
-This is valid after initial transients have decayed and at high Reynolds numbers.
-In the present implementation, we do \emph{not} use this simplification; instead, we solve equation~\eqref{eq:surf_vort} directly, which correctly captures transient vorticity dynamics and is consistent with the non-slip bottom boundary condition.
+Combining \eqref{eq:surf_kin} and \eqref{eq:surf_vort} and integrating in time yields the diagnostic relation
+\begin{equation}
+    w^{\prime 3} \;=\; 2\nu\, \Delta_H' \eta' \quad \text{at } z' = 0,
+    \label{eq:w3_diagnostic_remark}
+\end{equation}
+in the sense that the surface value of $w^{\prime 3}$ is determined algebraically by the surface elevation once initial vorticity transients have decayed \citep{GaleanoRiosEtAl2017}.
+This simplification is attractive because it eliminates one partial differential equation from the surface system; however, its validity rests on two conditions that are not always met: first, that the initial state has no residual surface vorticity, and second, that the Reynolds number is large enough that transient vorticity dynamics are irrelevant on the timescale of interest.
+Moreover, if the diagnostic relation is used, the vortical field loses its own degree of freedom at the surface, and the non-slip bottom boundary condition~\eqref{eq:bc_bot_w3}--\eqref{eq:bc_bot_w1} can no longer be imposed independently of the potential.
+In the present implementation we therefore retain equation~\eqref{eq:surf_vort} as an independent evolution equation for the surface $w^{\prime 3}$, solve the bulk heat equations~\eqref{eq:heat} for $w^{\prime 1}$ and $w^{\prime 3}$ throughout the domain, and impose the full non-slip bottom condition separately.
+This design choice admits a wider range of initial conditions and correctly captures the short-time transient behaviour at the surface.
 
 \subsection{Non-dimensionalisation}
 \label{sec:nondim}
@@ -219,6 +245,10 @@ This introduces the dimensionless numbers
     \Rey = \frac{V_c L_c}{\nu}.
     \label{eq:dimless}
 \end{equation}
+The Froude number $\Fr$ measures the ratio of inertia to gravity; for $\Fr \gg 1$ inertia dominates and gravity waves are weakly restored, while for $\Fr \ll 1$ gravity strongly constrains surface motion.
+The Weber number $\We$ measures the ratio of inertia to capillarity; large $\We$ corresponds to a weakly capillary regime in which surface tension is unimportant at the scale $L_c$, whereas small $\We$ puts surface tension in the leading role.
+The Reynolds number $\Rey$ measures the ratio of inertia to viscous diffusion; free-surface wave problems of interest typically have $\Rey$ ranging from $\OO(10^2)$ for millimetric droplets to $\OO(10^5)$--$\OO(10^6)$ for centimetric or larger bodies in water.
+These three groups are sufficient to characterise the dynamics of the pure fluid problem; an additional parameter $M$, introduced in Section~\ref{sec:floating_body}, governs the coupled fluid--body dynamics.
 
 The dimensionless governing equations become:
 
@@ -253,6 +283,7 @@ The LNS framework extends naturally to the case of a rigid body floating on the 
 We consider a flat-bottomed rectangular body of half-width $a$ and mass per unit length $m$, centred at $x = x_c$, whose bottom lies at dimensional vertical position $z'_b(t')$ with vertical velocity $v'_b(t') = \mathrm{d} z'_b / \mathrm{d} t'$.
 At $t' = 0$ the body is in contact with the fluid surface.
 Unlike prescribed-motion formulations, the body motion here is determined self-consistently by Newton's second law driven by gravity and the integrated fluid pressure.
+This choice distinguishes the present formulation from a wavemaker-type treatment in which $z_b'(t')$ would be specified in advance: here, both the body trajectory and the fluid response are unknowns of the coupled problem, and the interaction between them is mediated by the surface pressure $p_s'$ on the wetted region of the body.
 
 \paragraph{Body equations of motion.}
 In dimensionless form, with $M = m/(\rho L_c^2)$ denoting the dimensionless mass per unit length,
@@ -265,25 +296,51 @@ The integral in~\eqref{eq:body_dyn} represents the net upward force exerted by t
 
 \paragraph{Boundary conditions under the wetted region.}
 Let $\mathcal{B}(t) = \{x : |x - x_c| < a\}$ denote the wetted region.
-Under $\mathcal{B}$, the standard free-surface boundary conditions are replaced by three conditions imposed by the presence of the solid body:
+Under $\mathcal{B}$, the free-surface boundary conditions must be replaced because the presence of the solid body renders the interface no longer a free surface: both the location of the interface and the tangential velocity of the fluid there are now constrained by the body geometry and motion.
+Three independent conditions are required:
 \begin{enumerate}
     \item \emph{Surface follows the body} (geometric constraint):
     \begin{equation}
         \eta(x, t) = z_b(t), \qquad x \in \mathcal{B}(t). \label{eq:body_eta_constraint}
     \end{equation}
+    Because the body is rigid and the surface is assumed to remain in contact with its flat bottom, the surface elevation under $\mathcal{B}$ is pinned to the body position.
+    This is a kinematic statement about the geometry of the interface, not a dynamic one: it does not by itself determine the body motion.
+
     \item \emph{Kinematic match} (no-penetration at the body bottom):
     \begin{equation}
         \partial_z \phi + w^3 = v_b(t), \qquad x \in \mathcal{B}(t), \; z = 0. \label{eq:body_kin_match}
     \end{equation}
-    This replaces the free-surface kinematic condition~\eqref{eq:nd_kin} under the body; its compatibility with~\eqref{eq:body_eta_constraint} follows from $\mathrm{d} z_b / \mathrm{d} t = v_b$.
+    The total vertical fluid velocity at the linearised surface, $\partial_z\phi + w^3$, must equal the vertical velocity of the body to prevent interpenetration.
+    This replaces the free-surface kinematic condition~\eqref{eq:nd_kin} under the body.
+    Its compatibility with~\eqref{eq:body_eta_constraint} follows from differentiating the latter in time: $\partial_t \eta = \dot{z}_b = v_b$, which coincides with~\eqref{eq:nd_kin} evaluated under the body if and only if~\eqref{eq:body_kin_match} holds.
+    Thus the two constraints are not redundant but consistent, and together they fully determine the surface motion under the body.
+
     \item \emph{Horizontal no-slip} at the body bottom:
     \begin{equation}
         \partial_x \phi + w^1 = 0, \qquad x \in \mathcal{B}(t), \; z = 0. \label{eq:body_noslip}
     \end{equation}
-    This replaces the surface stress-free condition~\eqref{eq:nd_surf_w1} under the body.
+    The tangential velocity of the fluid at the body bottom must vanish because the body is rigid and moves only vertically.
+    This replaces the surface stress-free condition~\eqref{eq:nd_surf_w1} under the body: a stress-free interface is appropriate at an air--fluid boundary, but not at a solid wall.
 \end{enumerate}
-The dynamic boundary condition~\eqref{eq:nd_dyn} continues to hold at $z = 0$ everywhere, but under $\mathcal{B}$ the surface pressure $p_s$ is no longer prescribed to zero---it becomes an unknown whose role is that of a Lagrange multiplier enforcing the kinematic match~\eqref{eq:body_kin_match}.
-Outside the wetted region, $p_s = 0$ and the standard free-surface boundary conditions~\eqref{eq:nd_kin}--\eqref{eq:nd_vort} and~\eqref{eq:nd_surf_w1} apply.
+
+\paragraph{Role of the surface pressure.}
+The dynamic boundary condition~\eqref{eq:nd_dyn} continues to hold at $z = 0$ everywhere, including under the body.
+However, its interpretation changes between the two regions.
+Outside $\mathcal{B}$ the surface pressure $p_s$ vanishes (the free surface is in mechanical equilibrium with atmospheric pressure, taken as zero by convention), and~\eqref{eq:nd_dyn} is an evolution equation for $\phi_s$.
+Under $\mathcal{B}$ the surface pressure is no longer prescribed: it becomes an unknown whose role is that of a Lagrange multiplier enforcing the kinematic match~\eqref{eq:body_kin_match}.
+From this perspective, $p_s$ under the body represents \emph{whatever pressure distribution the fluid must exert on the bottom of the body} in order to make the fluid velocity match the body velocity at every point.
+This interpretation connects naturally to the standard treatment of constrained dynamics in mechanics, where Lagrange multipliers represent the internal forces required to maintain holonomic constraints.
+
+\paragraph{Hydrostatic equilibrium.}
+A useful consistency check is to consider the static limit in which the body is at rest on a quiescent fluid ($\dot{v}_b = 0$, $\partial_t \phi_s = 0$, $\ww = 0$).
+In this limit, the body equation of motion~\eqref{eq:body_dyn} reduces to the force balance $M/\Fr = \int_{\mathcal{B}} p_s\,\mathrm{d} x$, and the dynamic boundary condition~\eqref{eq:nd_dyn} reduces to $p_s = -\eta/\Fr$ (using $\kappa \to 0$ for a flat surface under the body).
+Combining these with the geometric constraint $\eta = z_b$ yields the hydrostatic equilibrium depth
+\begin{equation}
+    |z_b^{\mathrm{eq}}| = \frac{M}{2a} = \frac{m}{\rho\,\cdot\,2a},
+    \label{eq:hydrostatic}
+\end{equation}
+which is precisely the two-dimensional statement of Archimedes' principle: the body sinks until the displaced fluid mass per unit length equals the body's own mass per unit length.
+This result provides a quantitative target for the numerical scheme in Section~\ref{sec:results}.
 
 \paragraph{Summary of the coupled problem.}
 The full coupled fluid--body problem thus consists of the bulk fluid equations~\eqref{eq:nd_laplace}--\eqref{eq:nd_heat}, the piecewise-defined surface boundary conditions summarised in Table~\ref{tab:body_bcs}, the body equations of motion~\eqref{eq:body_kin}--\eqref{eq:body_dyn}, and the bottom non-slip conditions~\eqref{eq:nd_bot_w3}--\eqref{eq:nd_bot_w1}.
@@ -441,6 +498,9 @@ The LU factorisation takes approximately $0.06$~s and each back-substitution app
 \label{sec:augmented_monolithic}
 
 To solve the coupled fluid--body problem described in Section~\ref{sec:floating_body}, we extend the monolithic approach of Section~\ref{sec:monolithic} by augmenting the unknown vector with the surface pressure field and the two scalar body states.
+An alternative would be to couple the fluid and body solvers in a staggered fashion, advancing the fluid with a guess for the body state and then updating the body state from the integrated fluid pressure.
+Such staggered schemes are known to suffer from the \emph{added-mass instability}: for bodies whose mass is comparable to or smaller than the mass of fluid they displace, the time-lag between fluid and body updates produces unphysical oscillations that require either small time steps, subiteration, or stabilisation to suppress \citep{HughesLiuZimmermann1981, DoneaEtAl2004}.
+The monolithic formulation presented here sidesteps this issue by treating the body and fluid states as components of a single implicit system, so that the fluid pressure acting on the body and the body motion affecting the fluid are resolved simultaneously at each time step.
 Remarkably, the resulting system retains the same property as the pure fluid system: the coefficient matrix is constant in time and can be factored once via LU decomposition, after which each time step costs only a single back-substitution.
 
 \subsubsection{Augmented unknown vector}
@@ -510,6 +570,17 @@ Crucially, all coefficients are determined by grid parameters, $\Delta t$, the d
 None depend on the solution.
 Therefore, the augmented matrix is factored once via sparse LU decomposition at setup time, and each subsequent time step reduces to a single back-substitution.
 The augmented system has $N_{\mathrm{total}} = 3\,n_z n_x + 2\,n_x + 2$ unknowns, increased only by $n_x + 2$ compared with the pure fluid system.
+For a representative production grid of $n_x = 400$ and $n_z = 80$, the augmented system contains approximately $97{,}000$ unknowns, a modest increase from the approximately $96{,}000$ unknowns of the pure fluid system; the two additional body rows and the $n_x$ pressure rows contribute only marginally to the computational cost.
+
+\paragraph{Algorithmic summary.}
+Each time step of the coupled solver proceeds as follows:
+\begin{enumerate}
+    \item From the state $(w^{3,n}, w^{1,n}, \phi^n, \eta^n, p_s^n, z_b^n, v_b^n)$, assemble the right-hand-side vector $\bb(\xx^n)$ using explicit contributions from $\phi^n$, $\eta^n$, $z_b^n$, and $v_b^n$ according to the derivations in this section.
+    \item Compute the new state $\xx^{n+1} = \mathrm{LU}^{-1}\bb(\xx^n)$ by back-substitution against the pre-factored LU decomposition of $A$.
+    \item Extract the individual fields from $\xx^{n+1}$ using the offsets in~\eqref{eq:augmented_state}, and proceed to the next step.
+\end{enumerate}
+The LU factorisation is performed only once, at simulation setup, and reused for the entire run.
+The matrix assembly and factorisation together constitute a one-time cost of $\OO(N^{3/2})$ (typical for sparse direct solvers on banded systems), while each subsequent step costs $\OO(N)$ via the back-substitution.
 
 % TODO: Quote actual LU factorisation and per-step timings for augmented system once benchmarked at production resolution.
 
