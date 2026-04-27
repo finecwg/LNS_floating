@@ -230,6 +230,27 @@ Moreover, if the diagnostic relation is used, the vortical field loses its own d
 In the present implementation we therefore retain equation~\eqref{eq:surf_vort} as an independent evolution equation for the surface $w^{\prime 3}$, solve the bulk heat equations~\eqref{eq:heat} for $w^{\prime 1}$ and $w^{\prime 3}$ throughout the domain, and impose the full non-slip bottom condition separately.
 This design choice admits a wider range of initial conditions and correctly captures the short-time transient behaviour at the surface.
 
+\subsection{Summary of the model}
+\begin{subequations}
+\begin{align}
+    \Delta \phi &=0,& \qquad -H<z<0,t>0;\\
+    w^1_t &= \frac{1}{\Rey}\Delta w^1,& \qquad -H<z<0,t>0;\\
+    w^3_t &= \frac{1}{\Rey}\Delta w^3,& \qquad -H<z<0,t>0;\\
+    \eta_t &= \phi_z+w^3,& \qquad z=0,t>0;\\
+    \phi_t &= -\frac{1}{\Fr}\eta+\frac{1}{\We}\kappa\left[\eta\right]+\frac{2}{\Rey}\Delta_H\phi-\frac{2}{\Rey}w^3_z,& \qquad z=0, x>L,t>0;\\
+    \phi_z + w^3 &= v,& \qquad z=0, x\leq L,t>0;\\
+    2\phi_{xz}+w^1_z+w^3_x&=0,&z=0,x>L,t>0;\\
+     \phi_x &= -w^1,& \qquad z= 0, x\leq L,t>0; \\
+    \phi_x &= -w^1,& \qquad z= -H,t>0; \\
+    \phi_z &= -w^3,& \qquad z= -H,t>0; \\
+    h_t &= v,& \qquad t>0;\\
+    v_t &= -\frac{1}{\Fr} + \frac{1}{Ma}\int_0^L{\left[-\phi_t-\frac{1}{\Fr}\eta-\frac{2}{\Rey}\left(\phi_z+w^3\right)_z\right]},& \qquad t>0.
+\end{align}
+subject to all odd-order derivatives with respect to $x$ of $\eta$, $\phi$, $w^1$ and $w^3$ being equals to $0$ at $x=0$ and $x=D$. 
+\end{subequations}
+
+
+
 \subsection{Non-dimensionalisation}
 \label{sec:nondim}
 
