@@ -68,8 +68,9 @@
 \newcommand{\Order}{\mathcal{O}}
 \newcommand{\eqn}[1]{\textcolor{accentcol}{\textbf{#1}}}
 
-\title{Floating Object Solver v2}
-\subtitle{Self-consistent body dynamics via a monolithic constraint solve}
+\title{Floating Object Solver \texorpdfstring{v2~$\to$~v3}{v2 -> v3}}
+\subtitle{Self-consistent body dynamics via a monolithic constraint solve\\
+\small (slides updated for v3 corrections per Galeano-Rios's April 2026 feedback)}
 \author{Wongyung}
 \institute{LNS Floating Project}
 \date{\today}
@@ -260,26 +261,57 @@ The dynamic BC (2.15d) \textbf{still holds everywhere}, but $p_s$ is unknown und
 \begin{frame}{Surface pressure $p_s$: the Lagrange multiplier}
 \textbf{Outside body:} $p_s = 0$ (prescribed — free surface).
 
-\vspace{0.8em}
-\textbf{Under body:} $p_s$ becomes an \alert{unknown}, determined by enforcing constraint (2).
+\vspace{0.5em}
+\textbf{Under body:} $p_s$ becomes an \alert{unknown}, determined by enforcing the no-penetration constraint $\partial_z\phi + w^3 = v_b$.
 
-\vspace{0.8em}
+\vspace{0.5em}
 \begin{center}
-\small
+\footnotesize
 \begin{tabular}{@{}lll@{}}
 \toprule
 Quantity & Free surface ($x \notin \mathcal{B}$) & Wetted body ($x \in \mathcal{B}$) \\
 \midrule
 $\eta$ evolution & $\partial_t \eta = \partial_z\phi + w^3$ & $\eta = z_b$ \\
 Kinematic & (evolves $\eta$) & $\partial_z\phi + w^3 = v_b$ \\
-Horizontal $w^1$ & $\partial_z w^1 = -(\partial_{xz}\phi + \partial_x w^3)$ & $\partial_x\phi + w^1 = 0$ \\
+Horizontal $w^1$ & $2\partial_{xz}\phi + \partial_x w^3 + \partial_z w^1 = 0$ \alert{[v3 fix]} & $\partial_x\phi + w^1 = 0$ \\
 Surface pressure & $p_s = 0$ & $p_s$ = unknown \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\vspace{0.8em}
-\textbf{Interpretation}: $p_s$ on $\mathcal{B}$ acts like a Lagrange multiplier for the no-penetration constraint — whatever pressure is required to make the fluid follow the body.
+\vspace{0.5em}
+\textbf{Interpretation}: $p_s$ on $\mathcal{B}$ acts like a Lagrange multiplier — whatever pressure is required to make the fluid follow the body.
+\end{frame}
+
+% ===================================================================
+\begin{frame}{Two equivalent formulations of the body coupling}
+\small
+The coupled fluid--body problem can be written in either of two equivalent ways:
+
+\begin{block}{Formulation A — Lagrange multiplier (\textbf{used in v3 code})}
+\begin{itemize}
+\item State vector includes $p_s$ as an explicit unknown: $\xx = [w^3, w^1, \phi, \eta, \alert{p_s}, z_b, v_b]$.
+\item $p_s$-rows of the matrix enforce \textit{$p_s = 0$ outside body} and \textit{$\phi_z + w^3 = v_b$ under body}.
+\item Newton's row: $M\dot v_b = -M/\Fr + \int_\mathcal{B} p_s\,\dd x$.
+\item \textcolor{primarycol}{Pro: $p_s$ is a direct diagnostic output.} \textcolor{accentcol}{Con: state vector has $n_x$ extra rows.}
+\end{itemize}
+\end{block}
+
+\begin{block}{Formulation B — Explicit traction (prof's \texttt{main.tex})}
+\begin{itemize}
+\item No $p_s$ variable.
+\item Constraint $\phi_z + w^3 = v_b$ enforced as a direct row replacing the $\eta$-row under body.
+\item Newton's row uses the closed-form traction
+\[
+\tau_z = -\partial_t\phi - \tfrac{\eta}{\Fr} - \tfrac{2}{\Rey}\partial_z(\phi_z + w^3)
+\]
+substituted explicitly into the integral.
+\item \textcolor{primarycol}{Pro: smaller system.} \textcolor{accentcol}{Con: pressure must be reconstructed post-hoc.}
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+\small\textbf{Equivalence}: $p_s \equiv \tau_z$ on the body region. Both give the same physics; just different ways to spell the same coupled implicit problem.
 \end{frame}
 
 % ===================================================================
@@ -441,11 +473,13 @@ w^{3,n+1}_{0,j} + \frac{\phi^{n+1}_{1,j} - \phi^{n+1}_{0,j}}{\Delta z} \;=\; 0
 \]
 \end{block}
 
-\begin{block}{Surface ($i = n_z-1$): from (2.15e)}
+\begin{block}{Surface ($i = n_z-1$): heat eq inclusively \alert{[v3]}}
 \[
-\Big(I - \tfrac{2\Delta t}{\Rey}\Delta_H\Big)\, w^{3,n+1}_s \;=\; w^{3,n}_s \;+\; \tfrac{2\Delta t}{\Rey}\Delta_H\!\Big(\tfrac{\phi^n[-1] - \phi^n[-2]}{\Delta z}\Big)
+\Big(I - \tfrac{\Delta t}{\Rey}\Delta_{2\text{D}}\Big)\, w^{3,n+1}_s \;=\; w^{3,n}_s
 \]
-\small RHS uses $\phi^n$ (explicit) — avoids extra off-diagonal coupling on the LHS.
+with one-sided $\partial_{zz}$ stencil $(w^3_{-1} - 2 w^3_{-2} + w^3_{-3})/\Delta z^2$.
+\vspace{0.2em}
+\small \alert{v3 update}: the auxiliary surface vorticity equation (2.15e) is dropped.  Instead, the bulk heat equation is applied "inclusively" at the surface row, which gives the same physics with one fewer auxiliary equation.
 \end{block}
 \end{frame}
 
@@ -456,11 +490,16 @@ w^{3,n+1}_{0,j} + \frac{\phi^{n+1}_{1,j} - \phi^{n+1}_{0,j}}{\Delta z} \;=\; 0
 \vspace{0.6em}
 \textbf{Surface}: the equation \emph{switches} based on $\chi_j$.
 
-\begin{block}{Free node ($\chi_j = 0$): stress-free (2.11a)}
+\begin{block}{Free node ($\chi_j = 0$): stress-free (2.11a) \alert{[v3 fix]}}
+The full tangential-stress balance $\sigma_{xz} = \mu(\partial_x u_z + \partial_z u_x) = 0$ gives
 \[
-w^{1,n+1}_{-1,j} - w^{1,n+1}_{-2,j} + \Delta z\,(D_x\,w^{3,n+1}_{-1})_j \;=\; -\Delta z\,(\partial_{xz}\phi^n)_j
+2\,\partial_{xz}\phi + \partial_x w^3 + \partial_z w^1 = 0,
 \]
-\small couples $w^1$ surface to $w^3$ surface (implicit) and to $\phi^n$ (RHS).
+discretised as
+\[
+w^{1,n+1}_{-1,j} - w^{1,n+1}_{-2,j} + \Delta z\,(D_x\,w^{3,n+1}_{-1})_j \;=\; \alert{-2}\,\Delta z\,(\partial_{xz}\phi^n)_j.
+\]
+\small \alert{Factor of 2 on $\phi_{xz}$} (both $\partial_x u_z$ and $\partial_z u_x$ contribute via the symmetric mixed derivative).  v2 had only a single $\phi_{xz}$, which was an algebra error.
 \end{block}
 
 \begin{block}{Body node ($\chi_j = 1$): horizontal no-slip}
