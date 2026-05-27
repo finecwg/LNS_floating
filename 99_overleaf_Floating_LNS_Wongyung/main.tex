@@ -20,7 +20,9 @@
 \usepackage{amssymb}
 \usepackage{bm}
 \usepackage{xcolor}
+\usepackage{xcolor}
 \graphicspath{{./figures/}}
+
 
 % Custom commands
 \newcommand{\dd}{\mathrm{d}}
@@ -58,7 +60,7 @@
 \renewcommand{\shorttitle}{Monolithic LNS free-surface solver}
 
 \hypersetup{
-  pdftitle={A monolithic solver for linearised Navier--Stokes free-surface dynamics via Helmholtz decomposition},
+  pdftitle={A  solver for linearised Navier-Stokes dynamics via Helmholtz decomposition},
   pdfsubject={physics.flu-dyn, math.NA},
   pdfauthor={Author One, Author Two},
   pdfkeywords={free surface dynamics, linearised Navier--Stokes, Helmholtz decomposition, monolithic solver, LU prefactorisation},
@@ -77,6 +79,7 @@ We implement both a sequential (operator-splitting) solver and a monolithic form
 Because the coefficient matrix $A$ is independent of the solution, it is factored once via sparse LU decomposition; each subsequent time step requires only $\OO(N)$ back-substitution.
 We verify that the two formulations produce identical results to machine precision and demonstrate the computational advantage of the monolithic approach.
 We further extend the same monolithic framework to fluid--body coupling by augmenting the unknown vector with the surface pressure, vertical position, and vertical velocity of a floating rigid body, yielding a fully implicit solver in which the body motion is determined self-consistently by Newton's second law driven by gravity and the integrated fluid pressure.
+
 \end{abstract}
 
 \keywords{Free surface dynamics \and linearised Navier--Stokes \and Helmholtz decomposition \and monolithic solver \and LU prefactorisation \and fluid--body coupling \and floating rigid body \and finite differences}
@@ -89,7 +92,7 @@ We further extend the same monolithic framework to fluid--body coupling by augme
 
 The dynamics of viscous free-surface flows arise in numerous physical settings, from ocean wave propagation and droplet impact to the interaction of floating bodies with fluid baths.
 While the full Navier--Stokes equations govern such flows, their nonlinearity and the need to track a moving free surface make direct numerical solution computationally expensive.
-For problems where surface deflections are small relative to the fluid depth, a linearised approach can retain the essential physics---gravity, surface tension, and viscous dissipation---at greatly reduced cost.
+For problems where surface deflections are small relative to the fluid depth, a linearised approach can retain the essential physics at greatly reduced cost.
 
 \citet{GaleanoRiosEtAl2017} developed such a linearised Navier--Stokes (LNS) framework in the context of non-wetting sphere impact on a fluid bath and bouncing droplet dynamics.
 The central idea is a Helmholtz decomposition of the velocity field $\uu = \nabla\phi + \ww$, which separates the flow into an irrotational component $\nabla\phi$ satisfying Laplace's equation in the bulk and a vortical component $\ww$ governed by the heat equation.
@@ -129,21 +132,22 @@ Section~\ref{sec:results} presents numerical results.
 % TODO: Expand outline once results are finalised.
 
 %% ================================================================
-%% 2. MATHEMATICAL MODEL
+%% 2. PHYSICAL SETUP
 %% ================================================================
-\section{Mathematical model}
+\section{Problem formulation}
 \label{sec:formulation}
 
-\subsection{Physical setup}
-\label{sec:setup}
+% \subsection{Physical setup}
+% \label{sec:setup}
+We consider a 2-dimensional (2D) bath of incompressible fluid with uniform density $\rho$, kinematic viscosity $\nu$ and surface tension coefficient $\sigma$. 
 
-We consider a two-dimensional domain with horizontal coordinate $x' \in [0, L']$ and vertical coordinate $z'$, where $z' = 0$ is at the mean free surface and $z' = -D'$ is at the solid bottom.
+We consider a two-dimensional domain with horizontal coordinate $x' \in [-D, D]$ and vertical coordinate $z'$, where $z' = 0$ coincides with the undisturbed free surface and $z' = -H$ is at the solid bottom.
 The fluid has density $\rho$, kinematic viscosity $\nu$, and surface tension coefficient $\sigma$.
 The free surface is located at $z' = \eta'(x', t')$, where $\eta'$ is the surface elevation.
 Primes denote dimensional variables.
 
-We assume that surface deflections are small relative to the depth ($|\eta'| \ll D'$), so that the free-surface boundary conditions can be linearised about $z' = 0$.
-Horizontal boundary conditions are periodic: $\eta'(0, t') = \eta'(L', t')$, and similarly for all other fields.
+We assume that surface deflections are small relative to the depth ($|\eta'| \ll H$), so that the free-surface boundary conditions can be linearised about $z' = 0$.
+Solutions are assumed periodic in $x$; e.g., $\eta'(-D, t') = \eta'(D, t')$, and similarly for all other variables.
 
 \subsection{Helmholtz decomposition}
 \color{blue}
@@ -153,14 +157,15 @@ Following \citet{GaleanoRiosEtAl2017}, the velocity field is decomposed as
 \begin{equation}
     \uu = \nabla\phi + \ww, \label{eq:helmholtz}
 \end{equation}
-where $\phi(x', z', t')$ is a scalar potential and $\ww(x', z', t') = (w^{\prime 1}, w^{\prime 2}, w^{\prime 3})$ is a vector field carrying the vortical (rotational) part of the flow.
-In the present two-dimensional setting, the out-of-plane component vanishes by symmetry, $w^{\prime 2} = 0$, and we write $\ww = (w^{\prime 1}, w^{\prime 3})$, where $w^{\prime 1}$ and $w^{\prime 3}$ are the horizontal and vertical components of the vortical field, respectively.
-
-The decomposition~\eqref{eq:helmholtz} is not unique: for any scalar $\psi$ satisfying $\Delta\psi = 0$, one can add $\nabla\psi$ to $\nabla\phi$ and subtract it from $\ww$ without altering $\uu$.
-We remove this ambiguity by demanding that the potential carry the entire irrotational part of $\uu$, equivalently that $\ww$ be solenoidal:
+where $\phi(x', z', t')$ is a scalar potential and $\ww(x', z', t') = (w^{\prime 1}, w^{\prime 2}, w^{\prime 3})$ is a vector field carrying the vortical (rotational) part of the flow, which satisfies
 \begin{equation}
     \nabla \cdot \ww = 0. \label{eq:w_solenoidal}
 \end{equation}
+In the present two-dimensional setting, the out-of-plane component vanishes by symmetry, $w^{\prime 2} = 0$, and we write $\ww = (w^{\prime 1}, w^{\prime 3})$, where $w^{\prime 1}$ and $w^{\prime 3}$ are the horizontal and vertical components of the vortical field, respectively.
+
+% The decomposition~\eqref{eq:helmholtz} is not unique: for any scalar $\psi$ satisfying $\Delta\psi = 0$, one can add $\nabla\psi$ to $\nabla\phi$ and subtract it from $\ww$ without altering $\uu$.
+% We remove this ambiguity by demanding that the potential carry the entire irrotational part of $\uu$, equivalently that $\ww$ be solenoidal:
+
 Taking the divergence of~\eqref{eq:helmholtz} and using both~\eqref{eq:w_solenoidal} and the incompressibility of the fluid $\nabla \cdot \uu = 0$, we have
 \begin{equation}
     0 \;=\; \nabla \cdot \uu \;=\; \nabla \cdot (\nabla\phi) + \nabla \cdot \ww \;=\; \Delta\phi, \label{eq:laplace_derivation}
@@ -176,12 +181,12 @@ To derive the bulk equation governing $\ww$, we start from the linearised Navier
     \partial_{t'}\uu \;=\; -\frac{1}{\rho}\,\nabla p' + \nu\,\Delta\uu - g\,\hat{\bm{z}}, \label{eq:LNS_bulk_dim}
 \end{equation}
 where $p'$ is the dimensional pressure and $\hat{\bm{z}}$ is the unit vector pointing opposite to gravity.
-The nonlinear convective term $(\uu\cdot\nabla)\uu$ has been dropped on the basis that surface deflections, and therefore the fluid velocities they induce, are small compared with the characteristic scales of the problem (see Section~\ref{sec:setup}).
+The nonlinear convective term $(\uu\cdot\nabla)\uu$ has been dropped on the basis that surface deflections, and therefore the fluid velocities they induce, are small compared with the characteristic scales of the problem.
 Substituting~\eqref{eq:helmholtz} into~\eqref{eq:LNS_bulk_dim} and using $\Delta\phi = 0$ to suppress the diffusive contribution from the potential part, we obtain
 \begin{equation}
     \nabla(\partial_{t'}\phi) + \partial_{t'}\ww \;=\; -\frac{1}{\rho}\,\nabla p' + \nu\,\Delta\ww - g\,\hat{\bm{z}}. \label{eq:LNS_decomposed}
 \end{equation}
-The right-hand side of~\eqref{eq:LNS_decomposed} separates into a gradient part---which represents the irrotational dynamics and absorbs both pressure and gravity---and a non-gradient part, which represents the vortical dynamics.
+The right-hand side of~\eqref{eq:LNS_decomposed} separates into a gradient part, representing the irrotational dynamics and absorbs both pressure and gravity, and a non-gradient part, which represents the vortical dynamics.
 Matching the gradient and non-gradient parts of~\eqref{eq:LNS_decomposed} separately, we identify
 \begin{align}
     \partial_{t'}\phi \;&=\; -\frac{p'}{\rho} - g z', \label{eq:bernoulli_bulk} \\
@@ -190,12 +195,11 @@ Matching the gradient and non-gradient parts of~\eqref{eq:LNS_decomposed} separa
 where any spatially constant integration term has been absorbed into the gauge freedom of $\phi$.
 Equation~\eqref{eq:bernoulli_bulk} is the linearised Bernoulli relation valid throughout the bulk; it determines how the pressure responds to the time rate of change of the potential and to the hydrostatic head.
 \color{black}
-Equation~\eqref{eq:heat_dim_derivation} is the heat equation: each Cartesian component of the vortical field diffuses with kinematic viscosity~$\nu$ and, crucially, does not self-advect---this last property being a direct consequence of the linearisation.
+Equation~\eqref{eq:heat_dim_derivation} is the heat equation: each Cartesian component of the vortical field diffuses with kinematic viscosity~$\nu$ and, crucially, does not self-advect (this last property being a direct consequence of the linearisation).
 
-The appeal of the decomposition is now twofold.
-First, the irrotational part $\nabla\phi$ satisfies an elliptic, time-independent equation in the bulk, so it can be solved by standard sparse linear algebra once boundary data are specified.
-Second, the vortical part $\ww$ is governed by parabolic equations whose sources are concentrated at the boundaries, so that for moderate-to-high Reynolds numbers the bulk flow is dominated by the potential while the vortical component is confined to thin diffusive layers near the free surface and the solid bottom.
-The two fields are uncoupled in the bulk; their interaction takes place \emph{exclusively} through the boundary conditions at $z' = 0$ and $z' = -D'$, derived in the next section.
+Now, \textbf{(i)} the irrotational part $\nabla\phi$ satisfies an elliptic, time-independent equation in the bulk, so it can be solved by standard sparse linear algebra once boundary data are specified.
+\textbf{(ii)} The vortical part $\ww$ is governed by parabolic equations whose sources are concentrated at the boundaries, so that for moderate-to-high Reynolds numbers the bulk flow is dominated by the potential while the vortical component is confined to thin diffusive layers near the free surface and the solid bottom.
+The two fields are uncoupled in the bulk; their interaction takes place through the boundary conditions at $z' = 0$ and $z' = -D'$, derived in the next section.
 \color{blue}
 
 \subsection{Governing equations}
@@ -320,7 +324,7 @@ For the linearised, nearly flat surface the tangent direction is $\bm{t} \approx
 \begin{equation}
     \bm{t}\cdot\bm{\sigma}\cdot\bm{n}\big|_{z'=0} \;=\; \mu\,\big(\partial_{z'}u'_{x'} + \partial_{x'}u'_{z'}\big)\big|_{z'=0} \;=\; 0. \label{eq:tang_stress_zero}
 \end{equation}
-Now using the Helmholtz decomposition~\eqref{eq:helmholtz} to write $u'_{x'} = \partial_{x'}\phi' + w^{\prime 1}$ and $u'_{z'} = \partial_{z'}\phi' + w^{\prime 3}$, each velocity gradient in~\eqref{eq:tang_stress_zero} produces \emph{two} contributions---one from the potential and one from the vortical part:
+Now using the Helmholtz decomposition~\eqref{eq:helmholtz} to write $u'_{x'} = \partial_{x'}\phi' + w^{\prime 1}$ and $u'_{z'} = \partial_{z'}\phi' + w^{\prime 3}$, each velocity gradient in~\eqref{eq:tang_stress_zero} produces \emph{two} contributions i.e., one from the potential and one from the vortical part:
 \begin{align}
     \partial_{z'}u'_{x'} \;&=\; \partial_{x'z'}\phi' + \partial_{z'} w^{\prime 1}, \label{eq:dz_ux} \\
     \partial_{x'}u'_{z'} \;&=\; \partial_{x'z'}\phi' + \partial_{x'} w^{\prime 3}. \label{eq:dx_uz}
@@ -341,7 +345,7 @@ An earlier draft (v2) of the present implementation inadvertently retained a sin
 \label{sec:inclusive_treatment}
 
 In the formulation presented so far, the surface vortical component $w^{\prime 3}$ is governed by the dedicated surface vorticity equation~\eqref{eq:surf_vort}, while the bulk value of $w^{\prime 3}$ at $z' < 0$ is governed by the heat equation~\eqref{eq:heat}.
-An equivalent and---numerically---more convenient point of view is to impose the bulk heat equation~\eqref{eq:heat} \emph{inclusively} up to and including the surface $z' = 0$, with the second vertical derivative interpreted via a one-sided stencil that incorporates the surface boundary information.
+An equivalent and numerically more convenient point of view is to impose the bulk heat equation~\eqref{eq:heat} \emph{inclusively} up to and including the surface $z' = 0$, with the second vertical derivative interpreted via a one-sided stencil that incorporates the surface boundary information.
 
 To see the equivalence, we differentiate the solenoidal property~\eqref{eq:w_solenoidal} in the form $\partial_{z'} w^{\prime 3} = -\partial_{x'} w^{\prime 1}$ once more in $z'$ to obtain
 \begin{equation}
@@ -380,7 +384,7 @@ which is widely used in the high-Reynolds-number droplet/bouncing literature \ci
 \color{blue}
 This simplification is appealing because it eliminates one partial differential equation from the surface system; however, its validity rests on two conditions that are not always met: first, the initial state must have no residual surface vorticity, and second, the Reynolds number must be large enough that transient vortical dynamics are negligible on the timescale of interest.
 Moreover, if the diagnostic relation is used, the vortical field loses its own degree of freedom at the surface, and the non-slip bottom boundary condition~\eqref{eq:bc_bot_w3}--\eqref{eq:bc_bot_w1} can no longer be imposed independently of the potential.
-In the present implementation we therefore retain equation~\eqref{eq:surf_vort}---or, equivalently, the inclusive treatment of Section~\ref{sec:inclusive_treatment}---as an independent evolution of the surface $w^{\prime 3}$, solve the bulk heat equations~\eqref{eq:heat} for $w^{\prime 1}$ and $w^{\prime 3}$ throughout the domain, and impose the full non-slip bottom condition separately.
+In the present implementation we therefore retain equation~\eqref{eq:surf_vort} (or, equivalently, the inclusive treatment of Section~\ref{sec:inclusive_treatment}) as an independent evolution of the surface $w^{\prime 3}$, solve the bulk heat equations~\eqref{eq:heat} for $w^{\prime 1}$ and $w^{\prime 3}$ throughout the domain, and impose the full non-slip bottom condition separately.
 This design admits a wider range of initial conditions, faithfully captures the short-time transient behaviour at the surface, and permits the surface- and bottom-boundary layers to be resolved independently.
 
 \color{black}
@@ -392,21 +396,21 @@ The free-surface region is $\{z = 0,\; x > L\}$, where $L = x_c - a$ denotes the
 We use $h(t)$ for the body's vertical position and $v(t)$ for its vertical velocity; the contact half-width is denoted by $c$ in the summary so that $\eta = h - c$ corresponds to the linearised geometric constraint $\eta = z_b$ at the body's bottom (cf.~\eqref{eq:body_eta_constraint}).
 \begin{subequations}
 \begin{align}
-    \Delta \phi &=0,& \qquad -H<z<0,t>0;\\
+    \Delta \phi &=0,& -H<z<0,t>0;\\
     w^1_t &= \frac{1}{\Rey}\Delta w^1,& \qquad -H<z<0,t>0;\\
     w^3_t &= \frac{1}{\Rey}\Delta w^3,& \qquad -H<z<0,t>0;\\
     \eta_t &= \phi_z+w^3,& \qquad z=0,t>0;\\
-    \phi_t &= -\frac{1}{\Fr}\eta+\frac{1}{\We}\kappa\left[\eta\right]+\frac{2}{\Rey}\Delta_H\phi-\frac{2}{\Rey}w^3_z,& \qquad z=0, x>L,t>0;\\
-    \color{blue}\eta &\color{blue}= h-c,&\color{blue} \qquad z=0, x\leq L,t>0;\color{black}\\
-    2\phi_{xz}+w^1_z+w^3_x&=0,&z=0,x>L,t>0;\\
-     \phi_x &= -w^1,& \qquad z= 0, x\leq L,t>0; \\
+    \phi_t &= -\frac{1}{\Fr}\eta+\frac{1}{\We}\kappa\left[\eta\right]+\frac{2}{\Rey}\Delta_H\phi-\frac{2}{\Rey}w^3_z,& \qquad L < x < D,t>0;\\
+    \color{blue}\eta &\color{blue}= h(t)-c,&\color{blue} \qquad z=0,  0\leq x \leq L,t>0;\color{black}\\
+    0&=2\phi_{xz}+w^1_z+w^3_x,&z=0,x>L,t>0;\\
+     \phi_x &= -w^1,& \qquad z= 0, L\leq x\leq D,t>0; \\
     \phi_x &= -w^1,& \qquad z= -H,t>0; \\
     \phi_z &= -w^3,& \qquad z= -H,t>0; \\
     h_t &= v,& \qquad t>0;\\
-    v_t &= -\frac{1}{\Fr} + {\color{blue}2\sigma \sin(\arctan(\eta_x))} + \frac{1}{Ma}\int_0^L{\left[-\phi_t-\frac{1}{\Fr}\eta-\frac{2}{\Rey}\left(\phi_z+w^3\right)_z\right]},& \qquad t>0.
+    v_t &= -\frac{1}{\Fr} + {\color{blue}2\sigma \sin(\arctan(\eta_x))} + \frac{1}{Ma}\int_0^L{\left[-\phi_t-\frac{1}{\Fr}\eta-\frac{2}{\Rey}\left(\phi_z+w^3\right)_z\right]},& t>0.
 \end{align}
-subject to all odd-order derivatives with respect to $x$ of $\eta$, $\phi$, $w^1$ and $w^3$ being equals to $0$ at $x=0$ and $x=D$.
 \end{subequations}
+subject to all odd-order derivatives with respect to $x$ of $\eta$, $\phi$, $w^1$ and $w^3$ being equals to $0$ at $x=0$ and $x=D$. 
 
 \color{blue}
 \noindent
@@ -422,7 +426,6 @@ Substituting that dynamic condition algebraically for $p_s$ recovers~(2.32) line
 The two forms are mathematically equivalent; the Lagrange-multiplier form is preferred numerically because it yields a sparser block structure (Section~\ref{sec:augmented_monolithic}).
 \end{minipage}}
 \color{black}
-
 
 
 \subsection{Non-dimensionalisation}
@@ -475,7 +478,7 @@ The dimensionless governing equations become:
 \label{sec:floating_body}
 
 The LNS framework extends naturally to the case of a rigid body floating on the fluid surface.
-We consider a flat-bottomed rectangular body of half-width $a$ and mass per unit length $m$, centred at $x = x_c$, whose bottom lies at dimensional vertical position $z'_b(t')$ with vertical velocity $v'_b(t') = \mathrm{d} z'_b / \mathrm{d} t'$.
+
 The geometric setup is illustrated in Figure~\ref{fig:schematic_2D}.
 
 \color{blue}
@@ -580,6 +583,9 @@ Capillary forces at the two contact lines $x = x_c \pm a$ (magenta) contribute a
 \label{fig:schematic_2D}
 \end{figure}
 \color{black}
+\color{blue}
+
+We consider a flat-bottomed rectangular body of half-width $a$ and mass per unit length $m$, centred at $x = x_c$, whose bottom lies at dimensional vertical position $z'_b(t')$ with vertical velocity $v'_b(t') = \mathrm{d} z'_b / \mathrm{d} t'$.
 \color{blue}
 At $t' = 0$ the body is in contact with the fluid surface.
 Unlike prescribed-motion formulations, the body motion here is determined self-consistently by Newton's second law driven by gravity and the integrated fluid pressure.
@@ -708,7 +714,7 @@ The additional unknowns introduced by the body are the surface pressure field $p
 \subsection{Extension to axisymmetric coordinates}
 \label{sec:axisymm}
 
-The two-dimensional Cartesian model of Sections~\ref{sec:setup}--\ref{sec:floating_body} generalises naturally to axisymmetric cylindrical coordinates $(r, z)$, in which the flow is independent of the azimuthal angle and the body becomes a flat-bottomed cylinder (a disk-bottomed solid) sitting on the surface.
+The two-dimensional Cartesian model of Sections~\ref{sec:formulation}--\ref{sec:floating_body} generalises naturally to axisymmetric cylindrical coordinates $(r, z)$, in which the flow is independent of the azimuthal angle and the body becomes a flat-bottomed cylinder (a disk-bottomed solid) sitting on the surface.
 This is the natural setting for three-dimensional rigid bodies centred on the symmetry axis (centred drops, disks, plates), and it is the geometry of the original sphere-impact problem of \citet{GaleanoRiosEtAl2017} in the appropriate flat-bottom limit.
 The axisymmetric geometry is illustrated in Figure~\ref{fig:schematic_axi}.
 
@@ -913,7 +919,7 @@ The radial domain is finite by necessity.
 We pick $L$ large enough that the surface waves emitted by the body do not reach $r = L$ within the simulation time (or, equivalently, that wave amplitudes have decayed to negligible levels by that radius).
 At $r = L$ we impose Dirichlet zero on all fields, $\phi = w^z = w^r = \eta = 0$, which is the natural ``effectively infinite'' boundary condition.
 Because $\phi = 0$ holds along the entire wall, $\partial_z \phi = 0$ there too, so $\uu = \nabla\phi + \ww = \bm{0}$ on the wall: the Dirichlet closure IS a strict non-slip wall in the far-wall limit.
-This is the radial analogue of the periodic-in-$x$ closure used in Section~\ref{sec:setup}; both are ``spend domain size to save boundary complexity'' strategies.
+This is the radial analogue of the periodic-in-$x$ closure used in Section~\ref{sec:formulation}; both are ``spend domain size to save boundary complexity'' strategies.
 
 \subsubsection{Axisymmetric floating body}
 \label{sec:axisymm_body}
@@ -993,7 +999,7 @@ The centred first-derivative operator $\bm{D}_x \in \mathbb{R}^{n_x \times n_x}$
     (\bm{D}_x)_{jk} \;=\; \frac{1}{2\Delta x}\,\big[\,\delta_{k,\,j+1\,\mathrm{mod}\, n_x} \;-\; \delta_{k,\,j-1\,\mathrm{mod}\, n_x}\,\big], \label{eq:Dx_entries}
 \end{equation}
 i.e.\ $(\bm{D}_x u)_j = (u_{j+1} - u_{j-1})/(2\Delta x)$.
-Both operators are second-order accurate in $\Delta x$, and both are circulant: they commute with each other and admit a closed-form spectrum via discrete Fourier modes, although we do not exploit this here---we simply assemble them as sparse \texttt{csr} matrices and pass them to a direct LU solver.
+Both operators are second-order accurate in $\Delta x$, and both are circulant: they commute with each other and admit a closed-form spectrum via discrete Fourier modes, although we do not exploit this here; we simply assemble them as sparse \texttt{csr} matrices and pass them to a direct LU solver.
 
 \subsubsection{Discrete vertical operators}
 
@@ -1134,7 +1140,6 @@ The block lower-triangular structure arises because:
 \subsubsection{Row-by-row specification of \texorpdfstring{$A$}{A}}
 \label{sec:row_by_row}
 
-For concreteness we now write out the rows of $A$ explicitly, for each block.
 Let $c_x = 1/(\Delta x)^2$, $c_z = 1/(\Delta z)^2$, $\alpha_{\Rey} = \Delta t/\Rey$, $\beta_{\Rey} = 2\Delta t/\Rey$; let $j_{\mathrm{L}} = (j - 1)\,\mathrm{mod}\, n_x$ and $j_{\mathrm{R}} = (j + 1)\,\mathrm{mod}\, n_x$ denote the periodic neighbours of column~$j$.
 We index unknowns by $(\mathrm{block}, i, j)$ where the block specifies which field, $i \in \{0,\dots,n_z-1\}$ is the vertical level, and $j \in \{0,\dots,n_x-1\}$ is the horizontal node.
 The components of~$\xx$ are stored in the order $\bm{w}^3$, $\bm{w}^1$, $\bm{\phi}_s$, $\bm{\phi}_{\mathrm{bulk}}$, $\bm{\eta}$.
@@ -1205,9 +1210,9 @@ Coupling between blocks accounts for additional off-diagonal entries: the $w^3$ 
 Adding these contributions gives a total of approximately $(3 \cdot 5\,n_z n_x) + (2 \cdot 3\,n_x) + 2\,(n_z n_x + n_x) \approx 15\,n_z n_x + 8\,n_x$ nonzeros, matching the empirical figure of $\sim 134{,}400$ for $n_x = 300, n_z = 30$ quoted below.
 \color{black}
 
-\subsubsection{Key property: constant coefficient matrix}
+\subsubsection{Constant coefficient matrix}
 
-Since all governing equations are linear with constant coefficients, the matrix $A$ depends only on grid parameters ($n_x$, $n_z$, $\Delta x$, $\Delta z$), the time step $\Delta t$, and the dimensionless numbers ($\Fr$, $\We$, $\Rey$)---not on the solution.
+Since all governing equations are linear with constant coefficients, the matrix $A$ depends only on grid parameters ($n_x$, $n_z$, $\Delta x$, $\Delta z$), the time step $\Delta t$, and the dimensionless numbers ($\Fr$, $\We$, $\Rey$), not on the solution.
 Therefore, $A$ is factored once at setup time via sparse LU decomposition:
 \begin{equation}
     A = LU \quad \text{(computed once)}.
@@ -1319,7 +1324,7 @@ For a representative production grid of $n_x = 400$ and $n_z = 80$, the augmente
 Each time step of the coupled solver proceeds as follows:
 \begin{enumerate}
     \item From the state $(w^{3,n}, w^{1,n}, \phi^n, \eta^n, p_s^n, z_b^n, v_b^n)$, assemble the right-hand-side vector $\bb(\xx^n)$ using explicit contributions from $\phi^n$, $\eta^n$, $z_b^n$, and $v_b^n$ according to the derivations in this section.
-    \item Compute the new state $\xx^{n+1} = \mathrm{LU}^{-1}\bb(\xx^n)$ by back-substitution against the pre-factored LU decomposition of $A$.
+    \item Compute the new state $\xx^{n+1} = \mathrm({LU})^{-1}\bb(\xx^n)$ by back-substitution against the pre-factored LU decomposition of $A$.
     \item Extract the individual fields from $\xx^{n+1}$ using the offsets in~\eqref{eq:augmented_state}, and proceed to the next step.
 \end{enumerate}
 The LU factorisation is performed only once, at simulation setup, and reused for the entire run.
@@ -1327,76 +1332,6 @@ The matrix assembly and factorisation together constitute a one-time cost of $\O
 
 % TODO: Quote actual LU factorisation and per-step timings for augmented system once benchmarked at production resolution.
 
-\color{blue}
-\subsection{Axisymmetric discretisation}
-\label{sec:axisymm_discretisation}
-
-The axisymmetric problem of Section~\ref{sec:axisymm} is discretised on a uniform radial grid
-\begin{equation}
-    r_j \;=\; j\,\Delta r, \qquad j = 0,\dots,n_r - 1, \qquad \Delta r \;=\; \frac{L}{n_r - 1},
-\end{equation}
-so that $r_0 = 0$ and $r_{n_r - 1} = L$.
-The vertical grid is unchanged from Section~\ref{sec:spatial}.
-
-\subsubsection{Discrete axisymmetric operators}
-\label{sec:axisymm_disc_ops}
-
-The discrete axisymmetric horizontal Laplacian $\bm{\Delta}_{H,\mathrm{ax}} \in \mathbb{R}^{n_r \times n_r}$ has the row structure
-\begin{equation}
-    (\bm{\Delta}_{H,\mathrm{ax}} u)_0 \;=\; \frac{4\,(u_1 - u_0)}{(\Delta r)^2}
-    \qquad \text{at the axis (L'H\^opital + mirror)},
-    \label{eq:Delta_H_axi_row_axis}
-\end{equation}
-and, for $0 < j < n_r - 1$,
-\begin{equation}
-    (\bm{\Delta}_{H,\mathrm{ax}} u)_j \;=\; (c_r - \beta_j)\,u_{j-1} \;-\; 2\,c_r\,u_j \;+\; (c_r + \beta_j)\,u_{j+1},
-    \label{eq:Delta_H_axi_row_interior}
-\end{equation}
-with $c_r = 1/(\Delta r)^2$ and $\beta_j = 1/(2\,r_j\,\Delta r)$.
-At the outer node $j = n_r - 1$, the row is overwritten by the Dirichlet zero condition $u_{n_r - 1} = 0$.
-
-The vector heat equation for $w^r$ acquires an extra $-w^r/r^2$ on the diagonal, so its discrete interior row reads
-\begin{equation}
-    (\bm{T}_r w^r)_j \;=\; (c_r - \beta_j)\,w^r_{j-1} \;-\; \Big(2\,c_r + \frac{1}{r_j^{\,2}}\Big)\,w^r_j \;+\; (c_r + \beta_j)\,w^r_{j+1}, \quad 0 < j < n_r - 1,
-    \label{eq:Tr_wr_disc}
-\end{equation}
-together with $w^r_0 = 0$ (axis regularity) and $w^r_{n_r - 1} = 0$ (outer Dirichlet).
-The two-dimensional axisymmetric scalar Laplacian is then the Kronecker sum $\bm{I}_{n_z} \otimes \bm{\Delta}_{H,\mathrm{ax}} + \bm{T}_z \otimes \bm{I}_{n_r}$, mirroring~\eqref{eq:Delta_2D}.
-
-\subsubsection{Newton's-law row with cylindrical area weight}
-\label{sec:axisymm_newton_row}
-
-The discrete body force balance for the axisymmetric solver reads
-\begin{equation}
-    M\,v_b^{n+1} \;-\; \Delta t\,2\pi \sum_{j:\,r_j < a} p_{s,j}^{n+1}\,r_j\,\Delta r \;=\; M\,v_b^n \;-\; \frac{\Delta t\,M}{\Fr},
-    \label{eq:vb_disc_axi}
-\end{equation}
-the cylindrical area weight $2\pi r_j\Delta r$ replacing the $\Delta x$ of the 2D Cartesian Newton row \eqref{eq:vb_disc}.
-The discrete body area
-\begin{equation}
-    A_{\mathrm{disc}} \;:=\; \sum_{j:\,r_j < a} 2\pi r_j\,\Delta r
-    \label{eq:A_disc}
-\end{equation}
-converges to the continuous area $\pi a^2$ as $\Delta r \to 0$, with an $\OO(\Delta r)$ truncation error arising from the placement of the body edge $r = a$ relative to grid nodes.
-The discrete hydrostatic equilibrium depth is correspondingly
-\begin{equation}
-    |z_b^{\mathrm{eq,disc}}| \;=\; \frac{M}{A_{\mathrm{disc}}},
-    \label{eq:zb_eq_disc}
-\end{equation}
-which approaches the continuous $M/(\pi a^2)$ of equation~\eqref{eq:Archimedes_3D} at the same rate.
-At $n_r = 200$ with $a = L_c$, $L = 20 L_c$, the discrete body area is approximately $9\%$ smaller than $\pi a^2$, so $|z_b^{\mathrm{eq,disc}}|$ is correspondingly about $9\%$ larger than $M/(\pi a^2)$; a release-from-rest hydrostatic test converges to within $1\%$ of $|z_b^{\mathrm{eq,disc}}|$ once the body has damped to rest.
-
-\subsubsection{Validation of the axisymmetric body solver}
-\label{sec:axisymm_validation}
-
-The axisymmetric floating-body solver is validated by:
-\begin{enumerate}
-    \item \emph{Smoke test.}~Verifies that the Lagrange-multiplier rows pin $p_s = 0$ off the body to machine precision after every time step, and that the augmented system assembles and factorises without numerical issues.
-    \item \emph{Hydrostatic equilibrium (3D Archimedes).}~Verifies that a release-from-rest run with negligible surface tension settles to a late-time mean $\langle z_b \rangle$ matching the discrete prediction $-M/A_{\mathrm{disc}}$ within a few percent.
-          (With significant surface tension, the contact-line capillary force $(1/\We)\,\partial_{rr}\eta$, which is sharply peaked at $r = a$, shifts the equilibrium to a shallower depth; this shift is captured automatically by the solver but is not represented by the bare Archimedes formula.)
-    \item \emph{Cylindrical area sanity.}~Verifies that the discrete sum $\sum_{j:r_j<a} 2\pi r_j\,\Delta r$ approaches $\pi a^2$ at the expected rate under grid refinement.
-\end{enumerate}
-\color{black}
 
 %% ================================================================
 %% 4. RESULTS
@@ -1404,46 +1339,7 @@ The axisymmetric floating-body solver is validated by:
 \section{Results}
 \label{sec:results}
 
-% TODO: This section will be populated with simulation results.
-% Currently verified:
-%
-% 1. Sequential vs monolithic equivalence
-%    - Max |eta_seq - eta_mono| = O(machine epsilon) over all time steps
-%    - Solutions match to 15+ significant digits
-%
-% 2. Physical verification (from notebook):
-%    - Energy monotonically decreasing (no spurious growth)
-%    - Mass conserved (integral of eta = const)
-%    - Non-slip BC satisfied: max|u| at bottom ~ 0
-%    - Vorticity decays due to viscous diffusion
-%
-% 3. Performance:
-%    - Monolithic: ~1.9 ms/step (LU backsolve)
-%    - Sequential: ~34 ms/step (multiple spsolve calls)
-%    - Speedup: ~18x
-%
-% Planned figures for the pure fluid problem:
-%    - Surface elevation evolution
-%    - Velocity potential contours
-%    - Velocity field (nabla phi + w)
-%    - Energy dissipation curves (log scale)
-%    - Mass conservation check
-%    - Monolithic vs sequential comparison
-%    - Convergence study (grid refinement)
-%
-% Planned items for the coupled fluid-body problem (v2):
-%    - Smoke test passes: p_s = 0 off body (machine precision), p_s profile
-%      under body is physically reasonable (concentration near edges),
-%      integrated force converges toward equilibrium M/Fr.
-%    - Release-from-rest test: body dropped at z_b(0) = 0, v_b(0) = 0, expect
-%      damped oscillation toward hydrostatic equilibrium.
-%    - Drop-impact test: body with initial downward velocity, expect
-%      deceleration, rebound, and wave radiation.
-%    - Free-oscillation period: compare with added-mass theory prediction
-%      T ~ 2 pi sqrt(M_eff / (2 a rho g / L)).
-%    - Energy balance: KE_body + PE_body + fluid energy + viscous dissipation
-%      should be conserved to discretisation error.
-%    - Timing benchmark of augmented monolithic at production resolution.
+
 
 
 %% ================================================================
@@ -1452,21 +1348,7 @@ The axisymmetric floating-body solver is validated by:
 \section{Discussion}
 \label{sec:discussion}
 
-% TODO: Write discussion. Planned topics:
-%
-% - Advantage of solving full (2.15e) vs diagnostic relation (2.17)
-% - Computational cost: O(N^{1.5}) setup + O(N) per step
-% - Fully implicit fluid-body coupling: avoids the added-mass instability
-%   that afflicts staggered (operator-split) fluid-body schemes, especially
-%   for light bodies (Jodlbauer et al. 2018; FloatStepper, 2024).
-% - Pressure as Lagrange multiplier: natural interpretation, directly
-%   connected to the constraint of no-penetration at the body bottom.
-% - Limitations: 2D Cartesian, linearised curvature, implicit Euler (first order),
-%   flat-bottomed rigid body only, no contact-line dynamics, no body
-%   separation/reattachment.
-% - Extensions: VS-BDF2 for second-order time accuracy, axisymmetric coordinates,
-%   curved bodies, multiple bodies, membrane instead of rigid body,
-%   external forcing (Faraday waves), sphere impact (Galeano-Rios 2017).
+
 
 
 %% ================================================================
@@ -1475,18 +1357,7 @@ The axisymmetric floating-body solver is validated by:
 \section{Conclusions}
 \label{sec:conclusions}
 
-% TODO: Write conclusions. Key points:
-%
-% - Implemented full LNS model (eqs 2.15a-e) with non-slip bottom BC
-% - Monolithic A x = b formulation: factor once, backsolve each step
-% - Machine-precision agreement with sequential solver
-% - ~18x speedup over sequential approach
-% - Extended the monolithic framework to a floating rigid body with
-%   self-consistent dynamics: surface pressure becomes a Lagrange multiplier
-%   enforcing the kinematic match under the wetted region, and Newton's
-%   second law for the body is added as two additional rows. The augmented
-%   system retains the constant-coefficient property and admits the same
-%   one-time LU prefactorisation.
+
 
 
 %% ================================================================
